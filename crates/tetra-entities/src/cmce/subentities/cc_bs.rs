@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use tetra_config::bluestation::SharedConfig;
 use tetra_core::{BitBuffer, Direction, Sap, SsiType, TdmaTime, TetraAddress, tetra_entities::TetraEntity, unimplemented_log};
-use tetra_core::{TimeslotOwner, TxReceipt, TxReporter, TxState};
+use tetra_core::{TimeslotOwner, TxReporter};
 use tetra_pdus::cmce::enums::disconnect_cause::DisconnectCause;
 use tetra_pdus::cmce::{
     enums::{
@@ -202,6 +202,7 @@ impl CcBsSubentity {
                 stealing_repeats_flag: false,
                 chan_alloc: None,
                 main_address: address,
+                tx_reporter: None,
             }),
         }
     }
@@ -480,6 +481,7 @@ impl CcBsSubentity {
                 stealing_repeats_flag: false,
                 chan_alloc: None,
                 main_address: calling_addr,
+                tx_reporter: None,
             }),
         };
         queue.push_back(msg);
@@ -554,12 +556,12 @@ impl CcBsSubentity {
         ) {
             Self::build_sapmsg_direct(sdu, self.dltime, target_addr, handle, link_id, endpoint_id)
         } else {
-            Self::build_sapmsg(sdu, None, self.dltime, target_addr)
+            Self::build_sapmsg(sdu, None, self.dltime, target_addr, None)
         };
         queue.push_back(msg);
     }
 
-    fn signal_umac_circuit_open(queue: &mut MessageQueue, call: &CmceCircuit, dltime: TdmaTime) {
+    fn signal_umac_circuit_open(queue: &mut MessageQueue, call: &CmceCircuit, dltime: TdmaTime, peer_ts: Option<u8>) {
         let circuit = Circuit {
             direction: call.direction,
             ts: call.ts,
@@ -958,7 +960,7 @@ impl CcBsSubentity {
         let mut setup_sdu = BitBuffer::new_autoexpand(80);
         d_setup_ref.to_bitbuf(&mut setup_sdu).expect("Failed to serialize DSetup");
         setup_sdu.seek(0);
-        let setup_msg = Self::build_sapmsg(setup_sdu, None, message.dltime, called_addr);
+        let setup_msg = Self::build_sapmsg(setup_sdu, None, message.dltime, called_addr, None);
         queue.push_back(setup_msg);
 
         // 3) Wait for U-ALERT from the called MS before notifying the caller.
@@ -1190,6 +1192,7 @@ impl CcBsSubentity {
                 stealing_repeats_flag: false,
                 chan_alloc: Some(chan_alloc_calling),
                 main_address: calling_addr,
+                tx_reporter: None,
             }),
         };
         queue.push_back(connect_msg);
@@ -1229,6 +1232,7 @@ impl CcBsSubentity {
                 stealing_repeats_flag: false,
                 chan_alloc: Some(chan_alloc_called),
                 main_address: called_addr,
+                tx_reporter: None,
             }),
         };
         queue.push_back(ack_msg);
@@ -1333,7 +1337,7 @@ impl CcBsSubentity {
                         }
                         let dest_addr = cached.dest_addr;
                         let (sdu, chan_alloc) = Self::build_d_setup_prim(&cached.pdu, usage, ts, UlDlAssignment::Both);
-                        let prim = Self::build_sapmsg(sdu, Some(chan_alloc), self.dltime, dest_addr);
+                        let prim = Self::build_sapmsg(sdu, Some(chan_alloc), self.dltime, dest_addr, None);
                         queue.push_back(prim);
                     }
 
@@ -1343,7 +1347,7 @@ impl CcBsSubentity {
                         // Get our cached D-SETUP, build D-RELEASE and send
                         if let Some(cached) = self.cached_setups.get(&call_id) {
                             let sdu = Self::build_d_release_from_d_setup(&cached.pdu, DisconnectCause::ExpiryOfTimer);
-                            let prim = Self::build_sapmsg(sdu, None, self.dltime, cached.dest_addr);
+                            let prim = Self::build_sapmsg(sdu, None, self.dltime, cached.dest_addr, None);
                             queue.push_back(prim);
 
                             if let Some(ind_call) = self.individual_calls.get(&call_id) {
@@ -1365,6 +1369,7 @@ impl CcBsSubentity {
                                         stealing_repeats_flag: false,
                                         chan_alloc: None,
                                         main_address: ind_call.calling_addr,
+                                        tx_reporter: None,
                                     }),
                                 };
                                 queue.push_back(prim_calling);
@@ -1428,7 +1433,7 @@ impl CcBsSubentity {
 
         // Send D-RELEASE to group
         let sdu = Self::build_d_release_from_d_setup(&cached.pdu, disconnect_cause);
-        let prim = Self::build_sapmsg(sdu, None, self.dltime, dest_addr);
+        let prim = Self::build_sapmsg(sdu, None, self.dltime, dest_addr, None);
         queue.push_back(prim);
 
         // Close the circuit in CircuitMgr and notify Brew
@@ -1521,10 +1526,10 @@ impl CcBsSubentity {
                 } else {
                     Self::build_d_release(call_id, disconnect_cause)
                 };
-                let prim_calling = Self::build_sapmsg(sdu_calling, None, self.dltime, call.calling_addr);
+                let prim_calling = Self::build_sapmsg(sdu_calling, None, self.dltime, call.calling_addr, None);
                 queue.push_back(prim_calling);
 
-                let prim_called = Self::build_sapmsg(sdu_called, None, self.dltime, call.called_addr);
+                let prim_called = Self::build_sapmsg(sdu_called, None, self.dltime, call.called_addr, None);
                 queue.push_back(prim_called);
             }
         }
@@ -2129,7 +2134,7 @@ impl CcBsSubentity {
         let d_setup_ref = &self.cached_setups.get(&call_id).unwrap().pdu;
 
         let (setup_sdu, setup_chan_alloc) = Self::build_d_setup_prim(d_setup_ref, usage, ts, UlDlAssignment::Both);
-        let setup_msg = Self::build_sapmsg(setup_sdu, Some(setup_chan_alloc), self.dltime, dest_addr.clone());
+        let setup_msg = Self::build_sapmsg(setup_sdu, Some(setup_chan_alloc), self.dltime, dest_addr.clone(), None);
         queue.push_back(setup_msg);
 
         // Send D-CONNECT to group

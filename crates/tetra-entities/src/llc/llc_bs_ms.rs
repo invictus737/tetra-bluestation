@@ -188,6 +188,7 @@ impl Llc {
                     req_handle: prim.req_handle,
                     pdu: pdu_buf,
                     main_address: prim.main_address,
+                    link_id: 0,
                     endpoint_id: prim.endpoint_id,
                     stealing_permission: prim.stealing_permission,
                     subscriber_class: prim.subscriber_class,
@@ -251,6 +252,7 @@ impl Llc {
                 req_handle: prim.req_handle,
                 pdu: pdu_buf,
                 main_address: prim.main_address,
+                link_id: 0,
                 endpoint_id: prim.endpoint_id,
                 stealing_permission: prim.stealing_permission,
                 subscriber_class: prim.subscriber_class,
@@ -579,6 +581,7 @@ impl TetraEntityTrait for Llc {
                     pdu: pdu_buf,
                     main_address: ack.addr,
                     // scrambling_code: self.config.config().scrambling_code(),
+                    link_id: 0,
                     endpoint_id: 0, // todo fixme
                     stealing_permission: steal,
                     subscriber_class: 0,            // TODO FIXME
