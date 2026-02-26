@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::panic;
 
 use crate::{MessageQueue, TetraEntityTrait};
-use tetra_config::SharedConfig;
+use tetra_config::bluestation::SharedConfig;
 use tetra_core::tetra_entities::TetraEntity;
-use tetra_core::{BitBuffer, Sap, SsiType, TdmaTime, TetraAddress, unimplemented_log};
+use tetra_core::{BitBuffer, Sap, SsiType, TdmaTime, TetraAddress, TxReporter, unimplemented_log};
 use tetra_saps::lcmc::enums::alloc_type::ChanAllocType;
 use tetra_saps::lcmc::enums::ul_dl_assignment::UlDlAssignment;
 use tetra_saps::lcmc::fields::chan_alloc_req::CmceChanAllocReq;
@@ -19,7 +19,22 @@ use tetra_pdus::llc::pdus::bl_adata::BlAdata;
 use tetra_pdus::llc::pdus::bl_data::BlData;
 use tetra_pdus::llc::pdus::bl_udata::BlUdata;
 
-pub struct AckData {
+/// Struct that maintains state expected acknowledgement data for a transmitted message.
+/// Aka, we still expect an ack for this.
+pub struct ExpectedInAck {
+    pub addr: TetraAddress,
+    pub t_start: TdmaTime,
+    pub n: u8,
+    /// Timeslot on which the original message was received
+    pub ts: u8,
+    /// Optional TxReporter, used to acknowledge reception by target MS
+    pub tx_reporter: Option<TxReporter>,
+    // Optional retransmission buffer, to allow for automatic retransmission of the PDU if no acknowledgement is received
+    pub retransmission_buf: Option<BitBuffer>,
+}
+
+/// Struct that maintains state for an ACK we still need to send back.
+pub struct ScheduledOutAck {
     pub addr: TetraAddress,
     pub t_start: TdmaTime,
     pub n: u8,
@@ -30,8 +45,8 @@ pub struct AckData {
 pub struct Llc {
     dltime: TdmaTime,
     config: SharedConfig,
-    scheduled_out_acks: Vec<AckData>,
-    expected_in_acks: Vec<AckData>,
+    scheduled_out_acks: Vec<ScheduledOutAck>,
+    expected_in_acks: Vec<ExpectedInAck>,
 
     /// Per-link send sequence variable V(S), keyed by SSI/GSSI address.
     /// Each link starts at 0 and alternates 0,1,0,1,...
@@ -52,7 +67,7 @@ impl Llc {
 
     /// Schedule an ACK to be sent at a later time
     pub fn schedule_outgoing_ack(&mut self, dltime: TdmaTime, addr: TetraAddress, ns: u8) {
-        self.scheduled_out_acks.push(AckData {
+        self.scheduled_out_acks.push(ScheduledOutAck {
             t_start: dltime,
             n: ns,
             addr,
@@ -82,22 +97,15 @@ impl Llc {
     }
 
     /// Register that we expect an ACK for this link (acknowledged mode only)
-    fn register_expected_ack(&mut self, t: TdmaTime, addr: TetraAddress, n: u8) {
-        self.expected_in_acks.push(AckData {
+    fn register_expected_ack(&mut self, t: TdmaTime, addr: TetraAddress, n: u8, tx_reporter: Option<TxReporter>) {
+        self.expected_in_acks.push(ExpectedInAck {
             t_start: t,
             n,
             addr,
             ts: t.t,
+            tx_reporter,
+            retransmission_buf: None,
         });
-    }
-
-    fn format_ack_list(ack_list: &Vec<AckData>) -> String {
-        let mut ret = String::new();
-        ret.push_str("Expected in acks:\n");
-        for ack in ack_list {
-            ret.push_str(&format!("  t: {}, ssi: {}, n: {}\n", ack.t_start.t, ack.addr.ssi, ack.n));
-        }
-        ret
     }
 
     /// Process incoming ACK. Remove outstanding ACK expectation. We ignore unexpected ones, might be a retransmission
@@ -113,7 +121,12 @@ impl Llc {
                         self.expected_in_acks[i].n
                     );
                 }
-                self.expected_in_acks.remove(i);
+
+                // Remove this expected ACK from the list, and if it has a TxReporter, mark it as acknowledged
+                let ack = self.expected_in_acks.remove(i);
+                if let Some(tx_reporter) = ack.tx_reporter {
+                    tx_reporter.mark_acknowledged();
+                }
                 return;
             }
         }
@@ -157,10 +170,7 @@ impl Llc {
         //    established LLC link with individual group members. Using BL-DATA
         //    causes radios (e.g. Sepura) to silently discard frames when the
         //    ns sequence number doesn't match their V(R).
-        // 3. Individually addressed messages without an LLC link context
-        //    (link_id/endpoint_id are zero), e.g. early call setup/teardown.
-        let no_link_ctx = prim.link_id == 0 && prim.endpoint_id == 0;
-        if prim.stealing_permission || prim.main_address.ssi_type == SsiType::Gssi || no_link_ctx {
+        if prim.stealing_permission || prim.main_address.ssi_type == SsiType::Gssi {
             let mut pdu_buf = BitBuffer::new_autoexpand(32);
             let pdu = BlUdata { has_fcs: false };
             pdu.to_bitbuf(&mut pdu_buf);
@@ -178,7 +188,6 @@ impl Llc {
                     req_handle: prim.req_handle,
                     pdu: pdu_buf,
                     main_address: prim.main_address,
-                    link_id: prim.link_id,
                     endpoint_id: prim.endpoint_id,
                     stealing_permission: prim.stealing_permission,
                     subscriber_class: prim.subscriber_class,
@@ -186,6 +195,7 @@ impl Llc {
                     stealing_repeats_flag: prim.stealing_repeats_flag,
                     data_category: prim.data_class_info,
                     chan_alloc: prim.chan_alloc,
+                    tx_reporter: prim.tx_reporter.take(),
                 }),
             };
             queue.push_back(sapmsg);
@@ -216,7 +226,7 @@ impl Llc {
             pdu_buf.seek(0);
             tracing::debug!("-> {:?} sdu {}", pdu, pdu_buf.dump_bin());
             // Register that we expect an ACK back (acknowledged mode only)
-            self.register_expected_ack(message.dltime, prim.main_address, ns);
+            self.register_expected_ack(message.dltime, prim.main_address, ns, prim.tx_reporter.clone());
         } else {
             // BL-DATA (unacknowledged, with or without FCS)
             let pdu = BlData {
@@ -232,10 +242,6 @@ impl Llc {
             // No ACK expected for unacknowledged BL-DATA
         }
 
-        // TODO FIXME:
-        // According to the spec we should issue a TL-REPORT to the upper layer
-        // self.issue_tla_report_ind(queue, TlaReport::ConfirmHandle);
-
         let sapmsg = SapMsg {
             sap: Sap::TmaSap,
             src: self.entity(),
@@ -245,8 +251,6 @@ impl Llc {
                 req_handle: prim.req_handle,
                 pdu: pdu_buf,
                 main_address: prim.main_address,
-                // scrambling_code: prim.scrambling_code,
-                link_id: prim.link_id,
                 endpoint_id: prim.endpoint_id,
                 stealing_permission: prim.stealing_permission,
                 subscriber_class: prim.subscriber_class,
@@ -254,7 +258,7 @@ impl Llc {
                 stealing_repeats_flag: prim.stealing_repeats_flag,
                 data_category: prim.data_class_info,
                 chan_alloc: prim.chan_alloc,
-                // redundant_transmission: prim.redundant_transmission,
+                tx_reporter: prim.tx_reporter.take(),
             }),
         };
         queue.push_back(sapmsg);
@@ -407,7 +411,6 @@ impl Llc {
         // If ns is present, we need to send an ACK
         if let Some(ns) = ns {
             // Send ACK
-            // let ul_time = message.dltime.add_timeslots(-2);
             self.schedule_outgoing_ack(message.dltime, prim.main_address, ns);
         }
 
@@ -482,6 +485,24 @@ impl Llc {
 
         queue.push_back(s);
     }
+
+    fn format_expected_ack_list(ack_list: &Vec<ExpectedInAck>) -> String {
+        let mut ret = String::new();
+        ret.push_str("Expected in acks:\n");
+        for ack in ack_list {
+            ret.push_str(&format!("  t: {}, ssi: {}, n: {}\n", ack.t_start.t, ack.addr.ssi, ack.n));
+        }
+        ret
+    }
+
+    fn format_scheduled_ack_list(ack_list: &Vec<ScheduledOutAck>) -> String {
+        let mut ret = String::new();
+        ret.push_str("Scheduled out acks:\n");
+        for ack in ack_list {
+            ret.push_str(&format!("  t: {}, ssi: {}, n: {}\n", ack.t_start.t, ack.addr.ssi, ack.n));
+        }
+        ret
+    }
 }
 
 impl TetraEntityTrait for Llc {
@@ -524,7 +545,6 @@ impl TetraEntityTrait for Llc {
             // Send BL-ACK via FACCH (stealing) on the traffic timeslot if the original
             // message arrived on a traffic channel (TS2-4), otherwise via MCCH (TS1).
             let steal = matches!(ack.ts, 2..=4);
-
             let mut pdu_buf = BitBuffer::new_autoexpand(5);
             let pdu = BlAck { has_fcs: false, nr: ack.n };
             pdu.to_bitbuf(&mut pdu_buf);
@@ -535,7 +555,20 @@ impl TetraEntityTrait for Llc {
             // Since DL is two slots ahead of UL, we will correct that. We now have the dltime for reception
             // of the original message.
             let dltime = self.dltime.add_timeslots(-2);
-
+            let chan_alloc = match steal {
+                true => {
+                    let mut timeslots = [false; 4];
+                    timeslots[(ack.ts - 1) as usize] = true;
+                    Some(CmceChanAllocReq {
+                        usage: None,
+                        timeslots,
+                        alloc_type: ChanAllocType::Replace,
+                        ul_dl_assigned: UlDlAssignment::Both,
+                        carrier: None,
+                    })
+                }
+                false => None,
+            };
             let sapmsg = SapMsg {
                 sap: Sap::TmaSap,
                 src: TetraEntity::Llc,
@@ -546,26 +579,14 @@ impl TetraEntityTrait for Llc {
                     pdu: pdu_buf,
                     main_address: ack.addr,
                     // scrambling_code: self.config.config().scrambling_code(),
-                    link_id: 0,
                     endpoint_id: 0, // todo fixme
                     stealing_permission: steal,
                     subscriber_class: 0,            // TODO FIXME
                     air_interface_encryption: None, // TODO FIXME
                     stealing_repeats_flag: None,    // TODO FIXME
                     data_category: None,            // TODO FIXME
-                    chan_alloc: if steal {
-                        let mut timeslots = [false; 4];
-                        timeslots[(ack.ts - 1) as usize] = true;
-                        Some(CmceChanAllocReq {
-                            usage: None,
-                            timeslots,
-                            alloc_type: ChanAllocType::Replace,
-                            ul_dl_assigned: UlDlAssignment::Both,
-                            carrier: None,
-                        })
-                    } else {
-                        None
-                    },
+                    chan_alloc,
+                    tx_reporter: None, // By definition, no higher layer entity is interested
                 }),
             };
             queue.push_back(sapmsg);

@@ -1,4 +1,4 @@
-use tetra_core::{BitBuffer, EndpointId, LinkId, TetraAddress, Todo};
+use tetra_core::{BitBuffer, EndpointId, LinkId, TetraAddress, Todo, TxReporter};
 
 use crate::lcmc::fields::chan_alloc_req::CmceChanAllocReq;
 
@@ -70,8 +70,7 @@ pub struct TmaUnitdataReq {
     // Custom fields for BS stack:
     /// Optional Channel Allocation Request that may be included by CMCE
     pub chan_alloc: Option<CmceChanAllocReq>,
-    // Number of identical retransmissions
-    // pub redundant_transmission: u8,
+    pub tx_reporter: Option<TxReporter>,
 }
 
 /// Clause 20.4.1.1.4

@@ -1,5 +1,29 @@
 use core::fmt;
 
+/// Convert a number of hyperframes to timeslots.  
+#[macro_export]
+macro_rules! hyperframes {
+    ($h:expr) => {
+        $h * 60 * 18 * 4
+    };
+}
+
+/// Convert a number of multiframes to timeslots.  
+#[macro_export]
+macro_rules! multiframes {
+    ($m:expr) => {
+        $m * 18 * 4
+    };
+}
+
+/// Convert a number of frames to timeslots.  
+#[macro_export]
+macro_rules! frames {
+    ($f:expr) => {
+        $f * 4
+    };
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub struct TdmaTime {
     /// Timeslot, from 1 to 4

@@ -1,4 +1,4 @@
-use tetra_config::SharedConfig;
+use tetra_config::bluestation::SharedConfig;
 
 /// Returns true if the Brew component is active
 #[inline]

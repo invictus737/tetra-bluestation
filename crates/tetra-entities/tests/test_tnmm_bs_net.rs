@@ -1,8 +1,7 @@
 mod common;
 
-use common::{ComponentTest, default_test_config};
 use std::time::Duration;
-use tetra_config::StackMode;
+use tetra_config::bluestation::StackMode;
 use tetra_core::debug::setup_logging_verbose;
 use tetra_core::tetra_entities::TetraEntity;
 use tetra_core::{Sap, TdmaTime};
@@ -14,11 +13,11 @@ use tetra_entities::tnmm_net::net_entity_tnmm_worker::NetEntityTnmmWorker;
 use tetra_saps::sapmsg::{SapMsg, SapMsgInner};
 use tetra_saps::tnmm::TnmmTestDemand;
 
+use crate::common::ComponentTest;
+
 fn build_test(use_quic: bool) -> ComponentTest {
     setup_logging_verbose();
-    let config = default_test_config(StackMode::Bs);
-    let ts = TdmaTime::default().add_timeslots(2);
-    let mut test = ComponentTest::new(config, Some(ts));
+    let mut test = ComponentTest::new(StackMode::Bs, None);
     let components = vec![
         // TetraEntity::Umac,
         // TetraEntity::Llc,

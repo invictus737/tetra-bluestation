@@ -1,6 +1,6 @@
 use std::panic;
 
-use tetra_config::SharedConfig;
+use tetra_config::bluestation::SharedConfig;
 use tetra_core::tetra_entities::TetraEntity;
 use tetra_core::{BitBuffer, PhyBlockNum, Sap, TdmaTime, Todo, unimplemented_log};
 use tetra_saps::tlmb::TlmbSysinfoInd;

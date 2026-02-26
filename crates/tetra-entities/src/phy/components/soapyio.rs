@@ -1,5 +1,5 @@
 use soapysdr;
-use tetra_config::SharedConfig;
+use tetra_config::bluestation::SharedConfig;
 
 use tetra_pdus::phy::traits::rxtx_dev::RxTxDevError;
 

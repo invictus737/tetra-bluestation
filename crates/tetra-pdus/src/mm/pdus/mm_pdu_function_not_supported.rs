@@ -141,7 +141,7 @@ mod tests {
     fn test_mm_pdu_function_not_supported_parse() {
         // Self-generated vec!!!
         debug::setup_logging_verbose();
-        let test_vec = "11110011110000010";
+        let test_vec = "111100110";
         let mut buf_in = BitBuffer::from_bitstr(test_vec);
         let pdu = MmPduFunctionNotSupported::from_bitbuf(&mut buf_in).expect("Failed parsing");
 

@@ -1,5 +1,5 @@
 use crate::{MessageQueue, TetraEntityTrait, brew};
-use tetra_config::SharedConfig;
+use tetra_config::bluestation::SharedConfig;
 use tetra_core::tetra_entities::TetraEntity;
 use tetra_core::{BitBuffer, Sap, SsiType, TdmaTime, TetraAddress, assert_warn, unimplemented_log};
 use tetra_saps::control::brew::{BrewSubscriberAction, MmSubscriberUpdate};
@@ -239,6 +239,7 @@ impl MmBs {
                 stealing_repeats_flag: false,
                 encryption_flag: false,
                 is_null_pdu: false,
+                tx_reporter: None,
             }),
         };
         queue.push_back(msg);
@@ -383,6 +384,7 @@ impl MmBs {
                 stealing_repeats_flag: false,
                 encryption_flag: false,
                 is_null_pdu: false,
+                tx_reporter: None,
             }),
         };
         queue.push_back(msg);

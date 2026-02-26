@@ -1,12 +1,13 @@
 mod common;
 
-use common::{ComponentTest, default_test_config};
-use tetra_config::StackMode;
+use tetra_config::bluestation::StackMode;
 use tetra_core::tetra_entities::TetraEntity;
 use tetra_core::{BitBuffer, PhyBlockNum, Sap, SsiType, TdmaTime, TetraAddress, debug};
 use tetra_saps::lmm::LmmMleUnitdataReq;
 use tetra_saps::sapmsg::{SapMsg, SapMsgInner};
 use tetra_saps::tmv::{TmvUnitdataInd, enums::logical_chans::LogicalChannel};
+
+use crate::common::ComponentTest;
 
 #[test]
 fn test_in_fragmented_sch_hu_and_sch_f() {
@@ -15,7 +16,8 @@ fn test_in_fragmented_sch_hu_and_sch_f() {
     debug::setup_logging_verbose();
     let test_vec1 = "00000000111111000001001111110111000100011001011100111000000011111100001000010000000000000000";
     let test_vec2 = "0110001110000000000010010000000000000000000000000100010000000000000000000000000110010000000000000000000000001000001000000111111000001001111110000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
-    let time_vec1 = TdmaTime::default().add_timeslots(2); // Uplink time: 0/1/1/1, dl time 0/1/1/3
+    let dltime_vec1 = TdmaTime::default().add_timeslots(2); // Downlink time: 0/1/1/3
+    let ultime_vec1 = dltime_vec1.add_timeslots(-2); // Uplink time: 0/1/1/1
     let test_prim1 = TmvUnitdataInd {
         pdu: BitBuffer::from_bitstr(test_vec1),
         block_num: PhyBlockNum::Block1,
@@ -27,7 +29,7 @@ fn test_in_fragmented_sch_hu_and_sch_f() {
         sap: Sap::TmvSap,
         src: TetraEntity::Lmac,
         dest: TetraEntity::Umac,
-        dltime: time_vec1,
+        dltime: ultime_vec1,
         msg: SapMsgInner::TmvUnitdataInd(test_prim1),
     };
     let test_prim2 = TmvUnitdataInd {
@@ -41,13 +43,12 @@ fn test_in_fragmented_sch_hu_and_sch_f() {
         sap: Sap::TmvSap,
         src: TetraEntity::Lmac,
         dest: TetraEntity::Umac,
-        dltime: time_vec1.add_timeslots(4), // Uplink time: 0/1/2/1
+        dltime: ultime_vec1.add_timeslots(4), // Uplink time: 0/1/2/1
         msg: SapMsgInner::TmvUnitdataInd(test_prim2),
     };
 
     // Setup testing stack
-    let config = default_test_config(StackMode::Bs);
-    let mut test = ComponentTest::new(config, Some(time_vec1));
+    let mut test = ComponentTest::new(StackMode::Bs, Some(dltime_vec1));
     let components = vec![TetraEntity::Umac, TetraEntity::Llc, TetraEntity::Mle];
     let sinks: Vec<TetraEntity> = vec![
         // TetraEntity::Lmac, // Simply discard
@@ -75,7 +76,8 @@ fn test_in_fragmented_sch_hu_and_sch_hu() {
     debug::setup_logging_verbose();
     let test_vec1 = "00000000111110010001111101110111000000010010011110000010000001100010001001001111100001010100";
     let test_vec2 = "10011000000101000110000000000000000000000000000000000000000000000000111111111111110100000010";
-    let time_vec1 = TdmaTime::default().add_timeslots(2); // Uplink time: 0/1/1/1, dl time 0/1/1/3
+    let dltime_vec1 = TdmaTime::default().add_timeslots(2); // Downlink time: 0/1/1/3
+    let ultime_vec1 = dltime_vec1.add_timeslots(-2); // Uplink time: 0/1/1/1
     let test_prim1 = TmvUnitdataInd {
         pdu: BitBuffer::from_bitstr(test_vec1),
         block_num: PhyBlockNum::Block1,
@@ -87,7 +89,7 @@ fn test_in_fragmented_sch_hu_and_sch_hu() {
         sap: Sap::TmvSap,
         src: TetraEntity::Lmac,
         dest: TetraEntity::Umac,
-        dltime: time_vec1,
+        dltime: ultime_vec1,
         msg: SapMsgInner::TmvUnitdataInd(test_prim1),
     };
     let test_prim2 = TmvUnitdataInd {
@@ -101,13 +103,12 @@ fn test_in_fragmented_sch_hu_and_sch_hu() {
         sap: Sap::TmvSap,
         src: TetraEntity::Lmac,
         dest: TetraEntity::Umac,
-        dltime: time_vec1.add_timeslots(4), // Uplink time: 0/1/2/1
+        dltime: ultime_vec1.add_timeslots(4), // Uplink time: 0/1/2/1
         msg: SapMsgInner::TmvUnitdataInd(test_prim2),
     };
 
     // Setup testing stack
-    let config = default_test_config(StackMode::Bs);
-    let mut test = ComponentTest::new(config, Some(time_vec1));
+    let mut test = ComponentTest::new(StackMode::Bs, Some(dltime_vec1));
     let components = vec![TetraEntity::Umac, TetraEntity::Llc, TetraEntity::Mle];
     let sinks: Vec<TetraEntity> = vec![
         // TetraEntity::Lmac, // Simply discard
@@ -134,7 +135,8 @@ fn test_out_fragmented_resource() {
     // As it is very large, it needs to be fragmented at the MAC layer.
     debug::setup_logging_verbose();
     let test_vec = "10110011011100110100110001101011100000000000011101010011001110110100000000000111010100111111101101000000000001110101010000000011010000000000011101010100000010110100000000000111010101000001001101000000000001110101010000011011010000000000011101010100001000110100000000000111010101000010101101000000000001110101010000110011010000000000011101010100001110110100000000000111010101000100001101000000000001110101010001001011010000000000011101010100010100";
-    let test_t = TdmaTime::default().add_timeslots(2); // Uplink time: 0/1/1/1, dl time 0/1/1/3
+    let dltime_vec = TdmaTime::default().add_timeslots(2); // Downlink time: 0/1/1/3
+    let ultime_vec = dltime_vec.add_timeslots(-2); // Uplink time: 0/1/1/1
     let test_prim = LmmMleUnitdataReq {
         sdu: BitBuffer::from_bitstr(test_vec),
         handle: 0,
@@ -148,18 +150,18 @@ fn test_out_fragmented_resource() {
         stealing_repeats_flag: false,
         encryption_flag: false,
         is_null_pdu: false,
+        tx_reporter: None,
     };
     let test_sapmsg = SapMsg {
         sap: Sap::LmmSap,
         src: TetraEntity::Mm,
         dest: TetraEntity::Mle,
-        dltime: test_t,
+        dltime: ultime_vec,
         msg: SapMsgInner::LmmMleUnitdataReq(test_prim),
     };
 
     // Setup testing stack
-    let config = default_test_config(StackMode::Bs);
-    let mut test = ComponentTest::new(config, Some(test_t));
+    let mut test = ComponentTest::new(StackMode::Bs, Some(dltime_vec));
     let components = vec![TetraEntity::Umac, TetraEntity::Llc, TetraEntity::Mle];
     let sinks: Vec<TetraEntity> = vec![TetraEntity::Lmac];
     test.populate_entities(components, sinks);

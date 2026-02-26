@@ -2,8 +2,8 @@
 //! between SDR device and modulator/demodulator code.
 
 use rustfft;
-use tetra_config::SharedConfig;
-use tetra_config::StackMode;
+use tetra_config::bluestation::SharedConfig;
+use tetra_config::bluestation::StackMode;
 
 use tetra_pdus::phy::traits::rxtx_dev::RxSlotBits;
 use tetra_pdus::phy::traits::rxtx_dev::RxTxDev;
@@ -103,7 +103,7 @@ impl RxTxDevSoapySdr {
             "Freqs: DL / UL: {:.6} MHz / {:.6} MHz   PPM: {:.2} -> err {:.0} / {:.0} hz, adj {:.6} MHz / {:.6} MHz",
             soapy_cfg.dl_freq / 1e6,
             soapy_cfg.ul_freq / 1e6,
-            soapy_cfg.ppm_err.unwrap_or(0.0),
+            soapy_cfg.ppm_err,
             dl_err,
             ul_err,
             dl_corrected / 1e6,

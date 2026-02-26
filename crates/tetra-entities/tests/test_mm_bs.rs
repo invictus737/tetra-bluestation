@@ -1,18 +1,20 @@
 mod common;
 
-use common::{ComponentTest, default_test_config};
-use tetra_config::StackMode;
+use tetra_config::bluestation::StackMode;
 use tetra_core::tetra_entities::TetraEntity;
 use tetra_core::{BitBuffer, Sap, SsiType, TdmaTime, TetraAddress, debug};
 use tetra_saps::lmm::LmmMleUnitdataInd;
 use tetra_saps::sapmsg::{SapMsg, SapMsgInner};
+
+use crate::common::ComponentTest;
 
 #[test]
 fn test_unsupported_u_mm_status() {
     // Motorola requesting power management
     debug::setup_logging_verbose();
     let test_vec1 = "00110000010010";
-    let time_vec1 = TdmaTime::default().add_timeslots(2); // Uplink time: 0/1/1/1, dl time 0/1/1/3
+    let dltime_vec1 = TdmaTime::default().add_timeslots(2); // Downlink time: 0/1/1/3
+    let ultime_vec1 = dltime_vec1.add_timeslots(-2); // Uplink time: 0/1/1/1
     let test_prim1 = LmmMleUnitdataInd {
         sdu: BitBuffer::from_bitstr(test_vec1),
         handle: 0,
@@ -26,13 +28,12 @@ fn test_unsupported_u_mm_status() {
         sap: Sap::LmmSap,
         src: TetraEntity::Mle,
         dest: TetraEntity::Mm,
-        dltime: time_vec1,
+        dltime: ultime_vec1,
         msg: SapMsgInner::LmmMleUnitdataInd(test_prim1),
     };
 
     // Setup testing stack
-    let config = default_test_config(StackMode::Bs);
-    let mut test = ComponentTest::new(config, Some(time_vec1));
+    let mut test = ComponentTest::new(StackMode::Bs, Some(dltime_vec1));
     let components = vec![TetraEntity::Mm];
     let sinks: Vec<TetraEntity> = vec![TetraEntity::Mle];
     test.populate_entities(components, sinks);

@@ -5,11 +5,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender, unbounded};
-use tetra_config::stack_config_brew::CfgBrew;
 use uuid::Uuid;
 
 use crate::{MessageQueue, TetraEntityTrait};
-use tetra_config::SharedConfig;
+use tetra_config::bluestation::{CfgBrew, SharedConfig};
 use tetra_core::{Sap, TdmaTime, tetra_entities::TetraEntity};
 use tetra_saps::control::brew::{BrewSubscriberAction, MmSubscriberUpdate};
 use tetra_saps::{SapMsg, SapMsgInner, control::call_control::CallControl, tmd::TmdCircuitDataReq};

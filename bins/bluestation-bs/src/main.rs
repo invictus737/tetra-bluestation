@@ -3,7 +3,7 @@ use clap::Parser;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tetra_config::{PhyBackend, SharedConfig, StackMode, toml_config};
+use tetra_config::bluestation::{PhyBackend, SharedConfig, StackMode, parsing};
 use tetra_core::{TdmaTime, debug};
 use tetra_entities::MessageRouter;
 use tetra_entities::brew::entity::BrewEntity;
@@ -20,7 +20,7 @@ use tetra_entities::{
 
 /// Load configuration file
 fn load_config_from_toml(cfg_path: &str) -> SharedConfig {
-    match toml_config::from_file(cfg_path) {
+    match parsing::from_file(cfg_path) {
         Ok(c) => c,
         Err(e) => {
             println!("Failed to load configuration from {}: {}", cfg_path, e);

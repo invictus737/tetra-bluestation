@@ -1,6 +1,6 @@
 use crate::mle::components::mle_router::MleRouter;
 use crate::{MessageQueue, TetraEntityTrait};
-use tetra_config::SharedConfig;
+use tetra_config::bluestation::SharedConfig;
 use tetra_core::tetra_entities::TetraEntity;
 use tetra_core::{BitBuffer, Sap, unimplemented_log};
 use tetra_saps::lcmc::LcmcMleUnitdataInd;
@@ -461,7 +461,7 @@ impl Mle {
                 req_handle: 0, // TODO FIXME; should we pass the same handle here?
                 graceful_degradation: None,
                 chan_alloc: None,
-                // redundant_transmission: 1,
+                tx_reporter: prim.tx_reporter.take(),
             }),
         };
         queue.push_back(sapmsg);
@@ -525,7 +525,7 @@ impl Mle {
                 req_handle: 0, // TODO FIXME
                 graceful_degradation: None,
                 chan_alloc,
-                // redundant_transmission: prim.redundant_transmission
+                tx_reporter: prim.tx_reporter.take(),
             }),
         };
         queue.push_back(sapmsg);

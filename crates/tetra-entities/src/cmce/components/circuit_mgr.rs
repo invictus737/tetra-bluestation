@@ -1,11 +1,14 @@
 use std::collections::VecDeque;
 
-use tetra_core::{Direction, TdmaTime, TimeslotAllocator, TimeslotOwner};
+use tetra_core::{Direction, TdmaTime, TimeslotAllocator, TimeslotOwner, frames, multiframes};
 use tetra_pdus::cmce::structs::cmce_circuit::CmceCircuit;
 use tetra_saps::{
     control::enums::{circuit_mode_type::CircuitModeType, communication_type::CommunicationType},
     lcmc::CallId,
 };
+
+const D_SETUP_REPEATS: i32 = 1;
+const LATE_ENTRY_INTERVAL_TIMESLOTS: i32 = multiframes!(5);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CircuitErr {
@@ -339,22 +342,22 @@ impl CircuitMgr {
             tasks = self.close_expired_circuits(tasks);
 
             // Next, go through channels, see if D-SETUPs need to be sent
-            // Late entry: resend D-SETUP every 20 multiframes (5 seconds)
-            const LATE_ENTRY_INTERVAL_TIMESLOTS: i32 = 20 * 18 * 4; // 20 MN = 1440 timeslots
-
+            // Late entry: resend D-SETUP every 5 seconds
             for circuit in self.dl.iter() {
                 if let Some(circuit) = circuit {
                     let age = circuit.ts_created.age(dltime);
 
                     // Send D-SETUP for the initial frame + 1 backup frame after circuit creation.
                     // Matches ETSI Annex D Figure D.2: 1 initial + 1 back-up on MCCH.
-                    if age < 1 * 4 {
+                    if age < frames!(D_SETUP_REPEATS) {
                         tasks
                             .get_or_insert_with(Vec::new)
                             .push(CircuitMgrCmd::SendDSetup(circuit.call_id, circuit.usage, circuit.ts));
                     }
-                    // Late entry: resend every 20 multiframes
-                    else if age % LATE_ENTRY_INTERVAL_TIMESLOTS == 0 {
+                    // Late entry: resend every 5 seconds.
+                    // Compare in frames (age/4) since tick_start only fires on t==1
+                    // but ts_created may have any timeslot value.
+                    else if (age / 4) % (LATE_ENTRY_INTERVAL_TIMESLOTS / 4) == 0 {
                         tasks
                             .get_or_insert_with(Vec::new)
                             .push(CircuitMgrCmd::SendDSetup(circuit.call_id, circuit.usage, circuit.ts));

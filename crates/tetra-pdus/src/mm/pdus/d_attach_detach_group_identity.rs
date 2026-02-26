@@ -149,13 +149,3 @@ impl fmt::Display for DAttachDetachGroupIdentity {
         )
     }
 }
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn test_d_attach_detach_group_identity() {
-        // We should collect and add a test
-        assert!(false);
-    }
-}

@@ -1,4 +1,4 @@
-use tetra_core::{BitBuffer, EndpointId, LinkId, MleHandle, TetraAddress, Todo};
+use tetra_core::{BitBuffer, EndpointId, LinkId, MleHandle, TetraAddress, Todo, TxReporter};
 
 use crate::{control::enums::circuit_mode_type::CircuitModeType, lcmc::fields::chan_alloc_req::CmceChanAllocReq};
 
@@ -190,6 +190,7 @@ pub struct LcmcMleUnitdataReq {
     pub chan_alloc: Option<CmceChanAllocReq>,
     // Transmit 4 times (if capacity allows)
     // pub redundant_transmission: u8,
+    pub tx_reporter: Option<TxReporter>,
 }
 
 /// MLE-UNITDATA indication: this primitive shall be used by the MLE to pass to the CMCE entity data which has

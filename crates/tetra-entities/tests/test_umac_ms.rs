@@ -1,19 +1,18 @@
 mod common;
 
-use common::{ComponentTest, default_test_config};
-use tetra_config::StackMode;
+use tetra_config::bluestation::StackMode;
 use tetra_core::tetra_entities::TetraEntity;
 use tetra_core::{BitBuffer, PhyBlockNum, Sap, TdmaTime, debug};
 use tetra_saps::sapmsg::{SapMsg, SapMsgInner};
 use tetra_saps::tmv::{TmvUnitdataInd, enums::logical_chans::LogicalChannel};
 
+use crate::common::ComponentTest;
+
 #[test]
 /// A test containing a single Lmac frame, containing a MAC-RESOURCE with no SDU, and a NULL pdu
 fn test_umac_ms() {
     debug::setup_logging_verbose();
-    let config = default_test_config(StackMode::Ms);
-    let mut test = ComponentTest::new(config, None);
-
+    let mut test = ComponentTest::new(StackMode::Ms, None);
     let components = vec![TetraEntity::Umac];
     let sinks: Vec<TetraEntity> = vec![];
     test.populate_entities(components, sinks);
@@ -50,9 +49,7 @@ fn test_umac_ms() {
 /// Also tests the in-between LLC and MLE.  
 fn test_umac_frag() {
     debug::setup_logging_verbose();
-    let config = default_test_config(StackMode::Ms);
-    let mut test = ComponentTest::new(config, None);
-
+    let mut test = ComponentTest::new(StackMode::Ms, None);
     let components = vec![TetraEntity::Umac, TetraEntity::Llc, TetraEntity::Mle, TetraEntity::Cmce];
     let sinks = vec![];
     test.populate_entities(components, sinks);
@@ -107,9 +104,7 @@ fn test_umac_frag() {
 /// A test containing a SYSINFO frame, parsed by UMAC and MLE
 fn test_sysinfo() {
     debug::setup_logging_verbose();
-    let config = default_test_config(StackMode::Ms);
-    let mut test = ComponentTest::new(config, None);
-
+    let mut test = ComponentTest::new(StackMode::Ms, None);
     let components = vec![TetraEntity::Umac, TetraEntity::Llc, TetraEntity::Mle];
     let sinks = vec![
         // TetraComponent::Mle
@@ -148,9 +143,7 @@ fn test_sysinfo() {
 /// A test containing a SYNC frame, parsed by UMAC and MLE
 fn test_sync() {
     debug::setup_logging_verbose();
-    let config = default_test_config(StackMode::Ms);
-    let mut test = ComponentTest::new(config, None);
-
+    let mut test = ComponentTest::new(StackMode::Ms, None);
     let components = vec![TetraEntity::Umac, TetraEntity::Llc, TetraEntity::Mle];
     let sinks = vec![TetraEntity::Lmac];
     test.populate_entities(components, sinks);
@@ -184,9 +177,7 @@ fn test_sync() {
 #[test]
 fn test_resource() {
     debug::setup_logging_verbose();
-    let config = default_test_config(StackMode::Ms);
-    let mut test = ComponentTest::new(config, None);
-
+    let mut test = ComponentTest::new(StackMode::Ms, None);
     let components = vec![TetraEntity::Umac, TetraEntity::Llc, TetraEntity::Mle, TetraEntity::Cmce];
     let sinks = vec![];
     test.populate_entities(components, sinks);

@@ -7,8 +7,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{Receiver, Sender};
-use tetra_config::SharedConfig;
-use tetra_config::stack_config_brew::CfgBrew;
+use tetra_config::bluestation::CfgBrew;
+use tetra_config::bluestation::SharedConfig;
 use tungstenite::{Message, WebSocket, stream::MaybeTlsStream};
 use uuid::Uuid;
 

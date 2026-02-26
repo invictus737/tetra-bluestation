@@ -19,6 +19,7 @@ pub mod tdma_time;
 pub mod tetra_common;
 pub mod tetra_entities;
 pub mod timeslot_alloc;
+pub mod tx_receipt;
 pub mod typed_pdu_fields;
 
 // Re-export commonly used items
@@ -30,6 +31,7 @@ pub use phy_types::*;
 pub use tdma_time::TdmaTime;
 pub use tetra_common::*;
 pub use timeslot_alloc::*;
+pub use tx_receipt::*;
 
 /// Handle assigned by MLE to primitives for MM/CMCE/SNDCP
 pub type MleHandle = u32;

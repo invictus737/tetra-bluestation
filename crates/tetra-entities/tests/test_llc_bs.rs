@@ -1,7 +1,7 @@
 mod common;
 
-use common::{ComponentTest, default_test_config};
-use tetra_config::StackMode;
+use common::ComponentTest;
+use tetra_config::bluestation::StackMode;
 use tetra_core::tetra_entities::TetraEntity;
 use tetra_core::{BitBuffer, Sap, SsiType, TdmaTime, TetraAddress, debug};
 use tetra_saps::sapmsg::{SapMsg, SapMsgInner};
@@ -14,7 +14,8 @@ fn test_udata_with_broken_mm_payload() {
 
     // FIXME make proper vec here that can be passed onwards
     let test_vec = "00011001011100111000000011111100001000010000000000000000"; // INCOMPLETE
-    let time_vec = TdmaTime::default().add_timeslots(2); // Uplink time: 0/1/1/1
+    let dltime_vec = TdmaTime::default().add_timeslots(2); // Downlink time: 0/1/1/3
+    let ultime_vec = dltime_vec.add_timeslots(-2); // Uplink time: 0/1/1/1
     let test_prim = TmaUnitdataInd {
         pdu: Some(BitBuffer::from_bitstr(test_vec)),
         main_address: TetraAddress {
@@ -35,14 +36,12 @@ fn test_udata_with_broken_mm_payload() {
         sap: Sap::TmaSap,
         src: TetraEntity::Umac,
         dest: TetraEntity::Llc,
-        dltime: time_vec,
+        dltime: ultime_vec,
         msg: SapMsgInner::TmaUnitdataInd(test_prim),
     };
 
     // Setup testing stack
-    let config = default_test_config(StackMode::Bs);
-    let mut test = ComponentTest::new(config, Some(time_vec));
-
+    let mut test = ComponentTest::new(StackMode::Bs, Some(dltime_vec));
     let components = vec![TetraEntity::Llc, TetraEntity::Mle, TetraEntity::Mm];
     let sinks: Vec<TetraEntity> = vec![TetraEntity::Umac];
     test.populate_entities(components, sinks);
