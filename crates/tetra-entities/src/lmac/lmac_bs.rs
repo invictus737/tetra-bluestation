@@ -275,10 +275,7 @@ impl LmacBs {
 
         // Sanity checks / state cleanup
         if pchan != PhysicalChannel::Tp && self.second_block_stolen[ts_idx] {
-            tracing::warn!(
-                "second_block_stolen set outside traffic burst; resetting (ts={})",
-                ul_time.t
-            );
+            tracing::warn!("second_block_stolen set outside traffic burst; resetting (ts={})", ul_time.t);
             self.second_block_stolen[ts_idx] = false;
         }
         if prim.block_num == PhyBlockNum::Block1 && prim.train_type != TrainingSequence::NormalTrainSeq2 {
@@ -308,11 +305,7 @@ impl LmacBs {
         if let Some(stolen) = prim.second_half_stolen {
             let ts_idx = message.dltime.t as usize - 1;
             self.second_block_stolen[ts_idx] = stolen;
-            tracing::trace!(
-                "rx_tmv_configure_req: second_half_stolen={} ts={}",
-                stolen,
-                message.dltime.t
-            );
+            tracing::trace!("rx_tmv_configure_req: second_half_stolen={} ts={}", stolen, message.dltime.t);
         }
     }
 

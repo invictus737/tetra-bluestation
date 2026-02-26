@@ -455,9 +455,7 @@ impl UmacBs {
                         // Null PDU
                         (if pdu.event_label.is_some() { 23 } else { 37 }, false, true)
                     }
-                    0b000010..0b111000 => {
-                        (len_ind as usize * 8, false, false)
-                    }
+                    0b000010..0b111000 => (len_ind as usize * 8, false, false),
                     0b111111 => {
                         // Start of fragmentation
                         (prim.pdu.get_len(), true, false)
@@ -1296,7 +1294,11 @@ impl UmacBs {
                         );
                     }
                 } else {
-                    tracing::trace!("rx_tmd_prim: no active DL circuit on ts={} (dl_ts={}), skipping loopback", ts, dl_ts);
+                    tracing::trace!(
+                        "rx_tmd_prim: no active DL circuit on ts={} (dl_ts={}), skipping loopback",
+                        ts,
+                        dl_ts
+                    );
                 }
             }
             _ => {
@@ -1305,23 +1307,14 @@ impl UmacBs {
         }
     }
 
-    fn store_stch_second_half_start(
-        &mut self,
-        queue: &mut MessageQueue,
-        message: &mut SapMsg,
-        addr: TetraAddress,
-        pdu: &MacData,
-    ) {
+    fn store_stch_second_half_start(&mut self, queue: &mut MessageQueue, message: &mut SapMsg, addr: TetraAddress, pdu: &MacData) {
         let SapMsgInner::TmvUnitdataInd(prim) = &mut message.msg else {
             panic!()
         };
         let ts_idx = message.dltime.t as usize - 1;
 
         if self.pending_stch[ts_idx].is_some() {
-            tracing::warn!(
-                "store_stch_second_half_start: overwriting pending STCH on ts {}",
-                message.dltime.t
-            );
+            tracing::warn!("store_stch_second_half_start: overwriting pending STCH on ts {}", message.dltime.t);
         }
 
         let sdu_part = BitBuffer::from_bitbuffer_pos(&prim.pdu);

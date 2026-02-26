@@ -12,9 +12,9 @@ use tetra_pdus::cmce::{
     fields::basic_service_information::BasicServiceInformation,
     pdus::{
         d_alert::DAlert, d_call_proceeding::DCallProceeding, d_connect::DConnect, d_connect_acknowledge::DConnectAcknowledge,
-        d_disconnect::DDisconnect, d_release::DRelease, d_setup::DSetup, d_tx_ceased::DTxCeased, d_tx_granted::DTxGranted,
-        u_alert::UAlert, u_connect::UConnect, u_disconnect::UDisconnect, u_release::URelease, u_setup::USetup,
-        u_tx_ceased::UTxCeased, u_tx_demand::UTxDemand,
+        d_disconnect::DDisconnect, d_release::DRelease, d_setup::DSetup, d_tx_ceased::DTxCeased, d_tx_granted::DTxGranted, u_alert::UAlert,
+        u_connect::UConnect, u_disconnect::UDisconnect, u_release::URelease, u_setup::USetup, u_tx_ceased::UTxCeased,
+        u_tx_demand::UTxDemand,
     },
     structs::cmce_circuit::CmceCircuit,
 };
@@ -246,14 +246,7 @@ impl CcBsSubentity {
         }
     }
 
-    fn build_sapmsg_direct(
-        sdu: BitBuffer,
-        dltime: TdmaTime,
-        address: TetraAddress,
-        handle: u32,
-        link_id: u32,
-        endpoint_id: u32,
-    ) -> SapMsg {
+    fn build_sapmsg_direct(sdu: BitBuffer, dltime: TdmaTime, address: TetraAddress, handle: u32, link_id: u32, endpoint_id: u32) -> SapMsg {
         SapMsg {
             sap: Sap::LcmcSap,
             src: TetraEntity::Cmce,
@@ -275,13 +268,7 @@ impl CcBsSubentity {
         }
     }
 
-    fn build_sapmsg_stealing(
-        sdu: BitBuffer,
-        dltime: TdmaTime,
-        address: TetraAddress,
-        ts: u8,
-        usage: Option<u8>,
-    ) -> SapMsg {
+    fn build_sapmsg_stealing(sdu: BitBuffer, dltime: TdmaTime, address: TetraAddress, ts: u8, usage: Option<u8>) -> SapMsg {
         // For FACCH stealing on traffic channel, must specify target timeslot
         let mut timeslots = [false; 4];
         timeslots[(ts - 1) as usize] = true;
@@ -698,12 +685,7 @@ impl CcBsSubentity {
     //     queue.push_back(msg);
     // }
 
-    fn signal_umac_circuit_open(
-        queue: &mut MessageQueue,
-        call: &CmceCircuit,
-        dltime: TdmaTime,
-        peer_ts: Option<u8>,
-    ) {
+    fn signal_umac_circuit_open(queue: &mut MessageQueue, call: &CmceCircuit, dltime: TdmaTime, peer_ts: Option<u8>) {
         let circuit = Circuit {
             direction: call.direction,
             ts: call.ts,
@@ -978,9 +960,7 @@ impl CcBsSubentity {
         if pdu.called_party_short_number_address.is_some()
             || (pdu.called_party_extension.is_some() && pdu.called_party_type_identifier != 2)
         {
-            tracing::warn!(
-                "U-SETUP P2P with invalid called party fields (short number/extension mismatch), rejecting"
-            );
+            tracing::warn!("U-SETUP P2P with invalid called party fields (short number/extension mismatch), rejecting");
             return;
         }
 
@@ -1055,14 +1035,7 @@ impl CcBsSubentity {
         // (U-ALERT/U-CONNECT), then allocate the TCH upon U-CONNECT.
 
         // 1) Send D-CALL-PROCEEDING to the calling MS (individually addressed)
-        self.send_d_call_proceeding(
-            queue,
-            message,
-            pdu,
-            call_id,
-            CallTimeoutSetupPhase::T60s,
-            false,
-        );
+        self.send_d_call_proceeding(queue, message, pdu, call_id, CallTimeoutSetupPhase::T60s, false);
 
         // 2) Send D-SETUP to called MS (individually addressed)
         let d_setup = DSetup {
@@ -1232,10 +1205,7 @@ impl CcBsSubentity {
         }
 
         if call_snapshot.simplex_duplex && !pdu.simplex_duplex_selection {
-            tracing::warn!(
-                "U-CONNECT call_id={} downgraded to simplex by called MS; not supported",
-                call_id
-            );
+            tracing::warn!("U-CONNECT call_id={} downgraded to simplex by called MS; not supported", call_id);
             self.release_individual_call(queue, call_id, DisconnectCause::RequestedServiceNotAvailable);
             return;
         }
@@ -1349,7 +1319,9 @@ impl CcBsSubentity {
 
         tracing::info!("-> {:?}", d_connect_ack);
         let mut ack_sdu = BitBuffer::new_autoexpand(28);
-        d_connect_ack.to_bitbuf(&mut ack_sdu).expect("Failed to serialize DConnectAcknowledge");
+        d_connect_ack
+            .to_bitbuf(&mut ack_sdu)
+            .expect("Failed to serialize DConnectAcknowledge");
         ack_sdu.seek(0);
 
         let ack_msg = SapMsg {
@@ -1434,9 +1406,7 @@ impl CcBsSubentity {
             CmcePduTypeUl::UDisconnect => self.rx_u_disconnect(_queue, message),
             CmcePduTypeUl::UAlert => self.rx_u_alert(_queue, message),
             CmcePduTypeUl::UConnect => self.rx_u_connect(_queue, message),
-            CmcePduTypeUl::UInfo
-            | CmcePduTypeUl::UStatus
-            | CmcePduTypeUl::UCallRestore => {
+            CmcePduTypeUl::UInfo | CmcePduTypeUl::UStatus | CmcePduTypeUl::UCallRestore => {
                 unimplemented_log!("{}", pdu_type);
             }
             _ => {
@@ -1489,8 +1459,7 @@ impl CcBsSubentity {
                             queue.push_back(prim);
 
                             if let Some(ind_call) = self.individual_calls.get(&call_id) {
-                                let sdu_calling =
-                                    Self::build_d_release_from_d_setup(&cached.pdu, DisconnectCause::ExpiryOfTimer);
+                                let sdu_calling = Self::build_d_release_from_d_setup(&cached.pdu, DisconnectCause::ExpiryOfTimer);
                                 let prim_calling = SapMsg {
                                     sap: Sap::LcmcSap,
                                     src: TetraEntity::Cmce,
@@ -1645,13 +1614,8 @@ impl CcBsSubentity {
                     call.calling_ts,
                     Some(call.calling_usage),
                 );
-                let prim_called = Self::build_sapmsg_stealing(
-                    sdu_called,
-                    self.dltime,
-                    call.called_addr,
-                    call.called_ts,
-                    Some(call.called_usage),
-                );
+                let prim_called =
+                    Self::build_sapmsg_stealing(sdu_called, self.dltime, call.called_addr, call.called_ts, Some(call.called_usage));
                 queue.push_back(prim_calling);
                 queue.push_back(prim_called);
             }
