@@ -966,6 +966,24 @@ impl CcBsSubentity {
             panic!()
         };
 
+        // For P2P calls, only ISSI addressing is valid (CPTI=1 or 2).
+        // Reject short-number or other types to avoid unintended group ringing.
+        if pdu.called_party_type_identifier != 1 && pdu.called_party_type_identifier != 2 {
+            tracing::warn!(
+                "U-SETUP P2P with non-ISSI called_party_type_identifier={} (rejecting)",
+                pdu.called_party_type_identifier
+            );
+            return;
+        }
+        if pdu.called_party_short_number_address.is_some()
+            || (pdu.called_party_extension.is_some() && pdu.called_party_type_identifier != 2)
+        {
+            tracing::warn!(
+                "U-SETUP P2P with invalid called party fields (short number/extension mismatch), rejecting"
+            );
+            return;
+        }
+
         let Some(called_ssi) = pdu.called_party_ssi else {
             tracing::warn!("U-SETUP P2P without called_party_ssi, ignoring");
             return;
