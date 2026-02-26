@@ -104,6 +104,9 @@ struct IndividualCall {
     calling_handle: u32,
     calling_link_id: u32,
     calling_endpoint_id: u32,
+    called_handle: Option<u32>,
+    called_link_id: Option<u32>,
+    called_endpoint_id: Option<u32>,
     calling_ts: u8,
     called_ts: u8,
     calling_usage: u8,
@@ -238,6 +241,35 @@ impl CcBsSubentity {
                 stealing_permission: false,
                 stealing_repeats_flag: false,
                 chan_alloc,
+                main_address: address,
+            }),
+        }
+    }
+
+    fn build_sapmsg_direct(
+        sdu: BitBuffer,
+        dltime: TdmaTime,
+        address: TetraAddress,
+        handle: u32,
+        link_id: u32,
+        endpoint_id: u32,
+    ) -> SapMsg {
+        SapMsg {
+            sap: Sap::LcmcSap,
+            src: TetraEntity::Cmce,
+            dest: TetraEntity::Mle,
+            dltime,
+            msg: SapMsgInner::LcmcMleUnitdataReq(LcmcMleUnitdataReq {
+                sdu,
+                handle,
+                endpoint_id,
+                link_id,
+                layer2service: 0,
+                pdu_prio: 0,
+                layer2_qos: 0,
+                stealing_permission: false,
+                stealing_repeats_flag: false,
+                chan_alloc: None,
                 main_address: address,
             }),
         }
@@ -988,6 +1020,9 @@ impl CcBsSubentity {
                 calling_handle: prim.handle,
                 calling_link_id: prim.link_id,
                 calling_endpoint_id: prim.endpoint_id,
+                called_handle: None,
+                called_link_id: None,
+                called_endpoint_id: None,
                 calling_ts,
                 called_ts,
                 calling_usage,
@@ -1017,7 +1052,7 @@ impl CcBsSubentity {
         };
 
         let call_id = pdu.call_identifier;
-        let Some(call) = self.individual_calls.get(&call_id) else {
+        let Some(call) = self.individual_calls.get(&call_id).cloned() else {
             tracing::warn!("U-ALERT for unknown call_id={}", call_id);
             return;
         };
@@ -1034,6 +1069,14 @@ impl CcBsSubentity {
         if call.alert_sent {
             tracing::debug!("U-ALERT call_id={} already alerted, ignoring", call_id);
             return;
+        }
+
+        if let Some(call) = self.individual_calls.get_mut(&call_id) {
+            if call.called_handle.is_none() {
+                call.called_handle = Some(prim.handle);
+                call.called_link_id = Some(prim.link_id);
+                call.called_endpoint_id = Some(prim.endpoint_id);
+            }
         }
 
         let calling_addr = call.calling_addr;
@@ -1077,7 +1120,7 @@ impl CcBsSubentity {
         };
 
         let call_id = pdu.call_identifier;
-        let Some(call_snapshot) = self.individual_calls.get(&call_id) else {
+        let Some(call_snapshot) = self.individual_calls.get(&call_id).cloned() else {
             tracing::warn!("U-CONNECT for unknown call_id={}", call_id);
             return;
         };
@@ -1103,6 +1146,14 @@ impl CcBsSubentity {
             );
             self.release_individual_call(queue, call_id, DisconnectCause::RequestedServiceNotAvailable);
             return;
+        }
+
+        if let Some(call) = self.individual_calls.get_mut(&call_id) {
+            if call.called_handle.is_none() {
+                call.called_handle = Some(prim.handle);
+                call.called_link_id = Some(prim.link_id);
+                call.called_endpoint_id = Some(prim.endpoint_id);
+            }
         }
 
         let calling_addr = call_snapshot.calling_addr;
@@ -1522,28 +1573,30 @@ impl CcBsSubentity {
             } else {
                 Self::build_d_release(call_id, disconnect_cause)
             };
-            let prim_calling = SapMsg {
-                sap: Sap::LcmcSap,
-                src: TetraEntity::Cmce,
-                dest: TetraEntity::Mle,
-                dltime: self.dltime,
-                msg: SapMsgInner::LcmcMleUnitdataReq(LcmcMleUnitdataReq {
-                    sdu: sdu_calling,
-                    handle: call.calling_handle,
-                    endpoint_id: call.calling_endpoint_id,
-                    link_id: call.calling_link_id,
-                    layer2service: 0,
-                    pdu_prio: 0,
-                    layer2_qos: 0,
-                    stealing_permission: false,
-                    stealing_repeats_flag: false,
-                    chan_alloc: None,
-                    main_address: call.calling_addr,
-                }),
-            };
+            let prim_calling = Self::build_sapmsg_direct(
+                sdu_calling,
+                self.dltime,
+                call.calling_addr,
+                call.calling_handle,
+                call.calling_link_id,
+                call.calling_endpoint_id,
+            );
             queue.push_back(prim_calling);
 
-            let prim_called = Self::build_sapmsg(sdu_called, None, self.dltime, call.called_addr);
+            let prim_called = if let (Some(handle), Some(link_id), Some(endpoint_id)) =
+                (call.called_handle, call.called_link_id, call.called_endpoint_id)
+            {
+                Self::build_sapmsg_direct(
+                    sdu_called,
+                    self.dltime,
+                    call.called_addr,
+                    handle,
+                    link_id,
+                    endpoint_id,
+                )
+            } else {
+                Self::build_sapmsg(sdu_called, None, self.dltime, call.called_addr)
+            };
             queue.push_back(prim_called);
         }
 
@@ -1926,7 +1979,31 @@ impl CcBsSubentity {
                     };
                     Self::build_sapmsg_stealing(sdu, self.dltime, target_addr, target_ts, usage)
                 } else {
-                    Self::build_sapmsg(sdu, None, self.dltime, target_addr)
+                    if target_addr.ssi == call_snapshot.calling_addr.ssi {
+                        Self::build_sapmsg_direct(
+                            sdu,
+                            self.dltime,
+                            target_addr,
+                            call_snapshot.calling_handle,
+                            call_snapshot.calling_link_id,
+                            call_snapshot.calling_endpoint_id,
+                        )
+                    } else if let (Some(handle), Some(link_id), Some(endpoint_id)) = (
+                        call_snapshot.called_handle,
+                        call_snapshot.called_link_id,
+                        call_snapshot.called_endpoint_id,
+                    ) {
+                        Self::build_sapmsg_direct(
+                            sdu,
+                            self.dltime,
+                            target_addr,
+                            handle,
+                            link_id,
+                            endpoint_id,
+                        )
+                    } else {
+                        Self::build_sapmsg(sdu, None, self.dltime, target_addr)
+                    }
                 };
                 queue.push_back(msg);
             }
