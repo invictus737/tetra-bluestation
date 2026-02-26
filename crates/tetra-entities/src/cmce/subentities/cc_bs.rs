@@ -925,13 +925,13 @@ impl CcBsSubentity {
         // (U-ALERT/U-CONNECT), then allocate the TCH upon U-CONNECT.
 
         // 1) Send D-CALL-PROCEEDING to the calling MS (individually addressed)
-        self.send_d_call_proceeding(queue, message, pdu, call_id, CallTimeoutSetupPhase::T60s, false);
+        self.send_d_call_proceeding(queue, message, pdu, call_id, CallTimeoutSetupPhase::T60s, true);
 
         // 2) Send D-SETUP to called MS (individually addressed)
         let d_setup = DSetup {
             call_identifier: call_id,
             call_time_out: CallTimeout::T5m,
-            hook_method_selection: false,
+            hook_method_selection: true,
             simplex_duplex_selection: pdu.simplex_duplex_selection,
             basic_service_information: pdu.basic_service_information.clone(),
             transmission_grant: TransmissionGrant::NotGranted,
@@ -965,6 +965,19 @@ impl CcBsSubentity {
 
         // 3) Wait for U-ALERT from the called MS before notifying the caller.
         // Some radios are sensitive to early D-ALERT; keep setup strictly ordered.
+
+        // 3a) Send U-ALERT for testing, U-ALERT makes the calling radio show a ringing status
+        // self.send_d_alert_individual(
+        //     queue,
+        //     message.dltime,
+        //     call_id,
+        //     pdu.simplex_duplex_selection,
+        //     calling_party,
+        //     prim.handle,
+        //     prim.link_id,
+        //     prim.endpoint_id,
+        //     CallTimeoutSetupPhase::T60s,
+        // );
 
         // Track pending individual call
         self.individual_calls.insert(
@@ -1157,7 +1170,7 @@ impl CcBsSubentity {
         let d_connect = DConnect {
             call_identifier: call_id,
             call_time_out: CallTimeout::T5m,
-            hook_method_selection: false,
+            hook_method_selection: true,
             simplex_duplex_selection: simplex_duplex,
             transmission_grant: TransmissionGrant::Granted,
             transmission_request_permission: false,
@@ -1564,10 +1577,10 @@ impl CcBsSubentity {
             unimplemented_log!("Area selection not supported: {}", pdu.area_selection);
             supported = false;
         };
-        if pdu.hook_method_selection {
-            // We do not implement explicit hook transitions yet; force hook_method_selection=false in responses.
-            unimplemented_log!("Hook method selection requested, forcing hook_method_selection=false");
-        };
+        // if pdu.hook_method_selection {
+        //     // We do not implement explicit hook transitions yet; force hook_method_selection=false in responses.
+        //     unimplemented_log!("Hook method selection requested, forcing hook_method_selection=false");
+        // };
         // Duplex supported only for P2P calls. Group/broadcast remain simplex only.
         if pdu.basic_service_information.communication_type == CommunicationType::P2p {
             if !pdu.simplex_duplex_selection {
