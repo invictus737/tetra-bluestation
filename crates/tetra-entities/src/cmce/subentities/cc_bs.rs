@@ -559,6 +559,80 @@ impl CcBsSubentity {
         queue.push_back(msg);
     }
 
+    fn send_d_disconnect_individual(
+        &mut self,
+        queue: &mut MessageQueue,
+        call_id: u16,
+        call_snapshot: &IndividualCall,
+        sender: TetraAddress,
+        disconnect_cause: DisconnectCause,
+    ) {
+        let target_addr = if sender.ssi == call_snapshot.calling_addr.ssi {
+            Some(call_snapshot.called_addr)
+        } else if sender.ssi == call_snapshot.called_addr.ssi {
+            Some(call_snapshot.calling_addr)
+        } else {
+            tracing::warn!(
+                "U-DISCONNECT/U-RELEASE (individual) call_id={} from unexpected ISSI {} (calling {}, called {})",
+                call_id,
+                sender.ssi,
+                call_snapshot.calling_addr.ssi,
+                call_snapshot.called_addr.ssi
+            );
+            None
+        };
+
+        let Some(target_addr) = target_addr else {
+            return;
+        };
+
+        let target_ts = if target_addr.ssi == call_snapshot.calling_addr.ssi {
+            call_snapshot.calling_ts
+        } else {
+            call_snapshot.called_ts
+        };
+
+        let d_disconnect = DDisconnect {
+            call_identifier: call_id,
+            disconnect_cause,
+            notification_indicator: None,
+            facility: None,
+            proprietary: None,
+        };
+        tracing::info!("-> {:?} (to ISSI {})", d_disconnect, target_addr.ssi);
+
+        let mut sdu = BitBuffer::new_autoexpand(32);
+        d_disconnect.to_bitbuf(&mut sdu).expect("Failed to serialize DDisconnect");
+        sdu.seek(0);
+
+        let msg = if call_snapshot.state == IndividualCallState::Active {
+            let usage = if target_addr.ssi == call_snapshot.calling_addr.ssi {
+                Some(call_snapshot.calling_usage)
+            } else {
+                Some(call_snapshot.called_usage)
+            };
+            Self::build_sapmsg_stealing(sdu, self.dltime, target_addr, target_ts, usage)
+        } else if target_addr.ssi == call_snapshot.calling_addr.ssi {
+            Self::build_sapmsg_direct(
+                sdu,
+                self.dltime,
+                target_addr,
+                call_snapshot.calling_handle,
+                call_snapshot.calling_link_id,
+                call_snapshot.calling_endpoint_id,
+            )
+        } else if let (Some(handle), Some(link_id), Some(endpoint_id)) = (
+            call_snapshot.called_handle,
+            call_snapshot.called_link_id,
+            call_snapshot.called_endpoint_id,
+        ) {
+            Self::build_sapmsg_direct(sdu, self.dltime, target_addr, handle, link_id, endpoint_id)
+        } else {
+            Self::build_sapmsg(sdu, None, self.dltime, target_addr)
+        };
+        queue.push_back(msg);
+    }
+
     // fn send_d_setup(&mut self, queue: &mut MessageQueue, message: &SapMsg, pdu_request: &USetup, call_id: u16, calling_party: TetraAddress) {
     //     tracing::trace!("send_d_setup");
 
@@ -1530,6 +1604,8 @@ impl CcBsSubentity {
             return;
         };
 
+        const SETUP_RELEASE_REPEATS: usize = 3;
+
         if call.state == IndividualCallState::Active {
             // Deliver on traffic channel via FACCH stealing so the MS is still listening.
             // Send twice to reduce "no response" due to occasional STCH loss.
@@ -1562,42 +1638,25 @@ impl CcBsSubentity {
                 queue.push_back(prim_called);
             }
         } else {
-            // Send D-RELEASE to calling and called MS
-            let sdu_calling = if let Some(cached) = self.cached_setups.get(&call_id) {
-                Self::build_d_release_from_d_setup(&cached.pdu, disconnect_cause)
-            } else {
-                Self::build_d_release(call_id, disconnect_cause)
-            };
-            let sdu_called = if let Some(cached) = self.cached_setups.get(&call_id) {
-                Self::build_d_release_from_d_setup(&cached.pdu, disconnect_cause)
-            } else {
-                Self::build_d_release(call_id, disconnect_cause)
-            };
-            let prim_calling = Self::build_sapmsg_direct(
-                sdu_calling,
-                self.dltime,
-                call.calling_addr,
-                call.calling_handle,
-                call.calling_link_id,
-                call.calling_endpoint_id,
-            );
-            queue.push_back(prim_calling);
+            // Send D-RELEASE to calling and called MS via MCCH (no LLC link context).
+            // During setup, both parties are monitoring MCCH, so force link_id=0.
+            for _ in 0..SETUP_RELEASE_REPEATS {
+                let sdu_calling = if let Some(cached) = self.cached_setups.get(&call_id) {
+                    Self::build_d_release_from_d_setup(&cached.pdu, disconnect_cause)
+                } else {
+                    Self::build_d_release(call_id, disconnect_cause)
+                };
+                let sdu_called = if let Some(cached) = self.cached_setups.get(&call_id) {
+                    Self::build_d_release_from_d_setup(&cached.pdu, disconnect_cause)
+                } else {
+                    Self::build_d_release(call_id, disconnect_cause)
+                };
+                let prim_calling = Self::build_sapmsg(sdu_calling, None, self.dltime, call.calling_addr);
+                queue.push_back(prim_calling);
 
-            let prim_called = if let (Some(handle), Some(link_id), Some(endpoint_id)) =
-                (call.called_handle, call.called_link_id, call.called_endpoint_id)
-            {
-                Self::build_sapmsg_direct(
-                    sdu_called,
-                    self.dltime,
-                    call.called_addr,
-                    handle,
-                    link_id,
-                    endpoint_id,
-                )
-            } else {
-                Self::build_sapmsg(sdu_called, None, self.dltime, call.called_addr)
-            };
-            queue.push_back(prim_called);
+                let prim_called = Self::build_sapmsg(sdu_called, None, self.dltime, call.called_addr);
+                queue.push_back(prim_called);
+            }
         }
 
         // Close the circuit(s)
@@ -1887,6 +1946,7 @@ impl CcBsSubentity {
         let SapMsgInner::LcmcMleUnitdataInd(prim) = &mut message.msg else {
             panic!()
         };
+        let sender = prim.received_tetra_address;
 
         let pdu = match URelease::from_bitbuf(&mut prim.sdu) {
             Ok(pdu) => {
@@ -1900,11 +1960,17 @@ impl CcBsSubentity {
         };
 
         let call_id = pdu.call_identifier;
-        tracing::info!("U-RELEASE: call_id={} cause={}", call_id, pdu.disconnect_cause);
-        if self.individual_calls.contains_key(&call_id) {
-            self.release_individual_call(queue, call_id, DisconnectCause::UserRequestedDisconnection);
+        let disconnect_cause = pdu.disconnect_cause;
+        tracing::info!("U-RELEASE: call_id={} cause={}", call_id, disconnect_cause);
+        if let Some(call_snapshot) = self.individual_calls.get(&call_id).cloned() {
+            tracing::info!("U-RELEASE (individual) call_id={} cause={}", call_id, disconnect_cause);
+            let sender_is_called = sender.ssi == call_snapshot.called_addr.ssi;
+            if call_snapshot.state == IndividualCallState::Active || sender_is_called {
+                self.send_d_disconnect_individual(queue, call_id, &call_snapshot, sender, disconnect_cause);
+            }
+            self.release_individual_call(queue, call_id, disconnect_cause);
         } else {
-            self.release_group_call(queue, call_id, DisconnectCause::UserRequestedDisconnection);
+            self.release_group_call(queue, call_id, disconnect_cause);
         }
     }
 
@@ -1936,79 +2002,11 @@ impl CcBsSubentity {
 
         if let Some(call_snapshot) = self.individual_calls.get(&call_id).cloned() {
             tracing::info!("U-DISCONNECT (individual) call_id={} cause={}", call_id, disconnect_cause);
-
-            let target_addr = if sender.ssi == call_snapshot.calling_addr.ssi {
-                Some(call_snapshot.called_addr)
-            } else if sender.ssi == call_snapshot.called_addr.ssi {
-                Some(call_snapshot.calling_addr)
-            } else {
-                tracing::warn!(
-                    "U-DISCONNECT (individual) call_id={} from unexpected ISSI {} (calling {}, called {})",
-                    call_id,
-                    sender.ssi,
-                    call_snapshot.calling_addr.ssi,
-                    call_snapshot.called_addr.ssi
-                );
-                None
-            };
-
-            if let Some(target_addr) = target_addr {
-                let target_ts = if target_addr.ssi == call_snapshot.calling_addr.ssi {
-                    call_snapshot.calling_ts
-                } else {
-                    call_snapshot.called_ts
-                };
-                let d_disconnect = DDisconnect {
-                    call_identifier: call_id,
-                    disconnect_cause,
-                    notification_indicator: None,
-                    facility: None,
-                    proprietary: None,
-                };
-                tracing::info!("-> {:?} (to ISSI {})", d_disconnect, target_addr.ssi);
-
-                let mut sdu = BitBuffer::new_autoexpand(32);
-                d_disconnect.to_bitbuf(&mut sdu).expect("Failed to serialize DDisconnect");
-                sdu.seek(0);
-
-                let msg = if call_snapshot.state == IndividualCallState::Active {
-                    let usage = if target_addr.ssi == call_snapshot.calling_addr.ssi {
-                        Some(call_snapshot.calling_usage)
-                    } else {
-                        Some(call_snapshot.called_usage)
-                    };
-                    Self::build_sapmsg_stealing(sdu, self.dltime, target_addr, target_ts, usage)
-                } else {
-                    if target_addr.ssi == call_snapshot.calling_addr.ssi {
-                        Self::build_sapmsg_direct(
-                            sdu,
-                            self.dltime,
-                            target_addr,
-                            call_snapshot.calling_handle,
-                            call_snapshot.calling_link_id,
-                            call_snapshot.calling_endpoint_id,
-                        )
-                    } else if let (Some(handle), Some(link_id), Some(endpoint_id)) = (
-                        call_snapshot.called_handle,
-                        call_snapshot.called_link_id,
-                        call_snapshot.called_endpoint_id,
-                    ) {
-                        Self::build_sapmsg_direct(
-                            sdu,
-                            self.dltime,
-                            target_addr,
-                            handle,
-                            link_id,
-                            endpoint_id,
-                        )
-                    } else {
-                        Self::build_sapmsg(sdu, None, self.dltime, target_addr)
-                    }
-                };
-                queue.push_back(msg);
+            let sender_is_called = sender.ssi == call_snapshot.called_addr.ssi;
+            if call_snapshot.state == IndividualCallState::Active || sender_is_called {
+                self.send_d_disconnect_individual(queue, call_id, &call_snapshot, sender, disconnect_cause);
             }
-
-            self.release_individual_call(queue, call_id, DisconnectCause::UserRequestedDisconnection);
+            self.release_individual_call(queue, call_id, disconnect_cause);
             return;
         }
 

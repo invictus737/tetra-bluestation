@@ -1,4 +1,4 @@
-use tetra_core::{BitBuffer, EndpointId, TetraAddress, Todo};
+use tetra_core::{BitBuffer, EndpointId, LinkId, TetraAddress, Todo};
 
 use crate::lcmc::fields::chan_alloc_req::CmceChanAllocReq;
 
@@ -56,6 +56,8 @@ pub struct TmaUnitdataReq {
     pub req_handle: Todo,
     pub pdu: BitBuffer,
     pub main_address: TetraAddress,
+    /// Link ID (0 when no LLC link context exists)
+    pub link_id: LinkId,
     // pub scrambling_code: u32, // TODO FIXME : according to the spec, should be there, but why do we need to provide this?
     pub endpoint_id: EndpointId,
     // pub pdu_prio: Todo, // optional feature

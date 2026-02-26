@@ -157,7 +157,10 @@ impl Llc {
         //    established LLC link with individual group members. Using BL-DATA
         //    causes radios (e.g. Sepura) to silently discard frames when the
         //    ns sequence number doesn't match their V(R).
-        if prim.stealing_permission || prim.main_address.ssi_type == SsiType::Gssi {
+        // 3. Individually addressed messages without an LLC link context
+        //    (link_id/endpoint_id are zero), e.g. early call setup/teardown.
+        let no_link_ctx = prim.link_id == 0 && prim.endpoint_id == 0;
+        if prim.stealing_permission || prim.main_address.ssi_type == SsiType::Gssi || no_link_ctx {
             let mut pdu_buf = BitBuffer::new_autoexpand(32);
             let pdu = BlUdata { has_fcs: false };
             pdu.to_bitbuf(&mut pdu_buf);
@@ -175,6 +178,7 @@ impl Llc {
                     req_handle: prim.req_handle,
                     pdu: pdu_buf,
                     main_address: prim.main_address,
+                    link_id: prim.link_id,
                     endpoint_id: prim.endpoint_id,
                     stealing_permission: prim.stealing_permission,
                     subscriber_class: prim.subscriber_class,
@@ -242,6 +246,7 @@ impl Llc {
                 pdu: pdu_buf,
                 main_address: prim.main_address,
                 // scrambling_code: prim.scrambling_code,
+                link_id: prim.link_id,
                 endpoint_id: prim.endpoint_id,
                 stealing_permission: prim.stealing_permission,
                 subscriber_class: prim.subscriber_class,
@@ -541,6 +546,7 @@ impl TetraEntityTrait for Llc {
                     pdu: pdu_buf,
                     main_address: ack.addr,
                     // scrambling_code: self.config.config().scrambling_code(),
+                    link_id: 0,
                     endpoint_id: 0, // todo fixme
                     stealing_permission: steal,
                     subscriber_class: 0,            // TODO FIXME

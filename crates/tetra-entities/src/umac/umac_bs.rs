@@ -1188,10 +1188,9 @@ impl UmacBs {
         };
 
         // Build MAC-RESOURCE optimistically (as if it would always fit in one slot)
-        // random_access_flag: true for SSI-addressed (responses to random access requests),
-        // false for GSSI-addressed (unsolicited group signaling like D-SETUP).
-        // A radio will reject a random-access-flagged message if it didn't initiate one.
-        let is_random_access_response = prim.main_address.ssi_type != SsiType::Gssi;
+        // random_access_flag: true for SSI-addressed responses to random access requests.
+        // When link_id == 0, we have no LLC link context, so treat as unsolicited (flag = false).
+        let is_random_access_response = prim.main_address.ssi_type != SsiType::Gssi && prim.link_id != 0;
         let mut pdu = MacResource {
             fill_bits: false, // Updated later
             pos_of_grant: 0,
@@ -1207,10 +1206,14 @@ impl UmacBs {
         };
         pdu.update_len_and_fill_ind(sdu.get_len());
 
-        // Add to scheduler: Group signaling (GSSI) → TS1 (MCCH) for idle radios.
-        // Individual signaling (SSI) → current TS, avoiding active traffic circuits.
+        // Add to scheduler: Group signaling (GSSI) → TS1 (MCCH).
+        // Individual signaling with no LLC link context (link_id == 0) → TS1 (MCCH),
+        // since the MS is listening on the control channel during setup/teardown.
+        // Otherwise, use current TS, avoiding active traffic circuits.
         let enqueue_ts = if prim.main_address.ssi_type == SsiType::Gssi {
             1 // Group signaling always on MCCH (TS1)
+        } else if prim.link_id == 0 {
+            1 // No LLC link context, force MCCH
         } else if self.channel_scheduler.circuit_is_active(Direction::Dl, message.dltime.t) {
             1 // Redirect individual signaling away from traffic TS
         } else {
