@@ -872,7 +872,17 @@ impl CcBsSubentity {
             ) {
                 Ok(circuit) => circuit.clone(),
                 Err(e) => {
-                    tracing::error!("Failed to allocate circuit for U-SETUP P2P: {:?}", e);
+                    // tracing::error!("Failed to allocate circuit for U-SETUP P2P: {:?}", e);
+                    tracing::info!(
+                        "CMCE: rejecting U-SETUP P2P from ISSI {} to ISSI {}, failed to allocate circuit for U-SETUP P2P, error: {:?}",
+                        calling_party.ssi,
+                        called_addr.ssi,
+                        e
+                    );
+                    let call_id = self.circuits.get_next_call_id();
+                    let sdu = Self::build_d_release(call_id, DisconnectCause::CongestionInInfrastructure);
+                    let msg = Self::build_sapmsg_direct(sdu, message.dltime, calling_party, prim.handle, prim.link_id, prim.endpoint_id);
+                    queue.push_back(msg);
                     return;
                 }
             };
@@ -888,9 +898,20 @@ impl CcBsSubentity {
                 ) {
                     Ok(circuit) => Some(circuit.clone()),
                     Err(e) => {
-                        tracing::error!("Failed to allocate second circuit for duplex P2P: {:?}", e);
+                        // tracing::error!("Failed to allocate second circuit for duplex P2P: {:?}", e);
                         let _ = self.circuits.close_circuit(Direction::Both, circuit_calling.ts);
                         let _ = state.timeslot_alloc.release(TimeslotOwner::Cmce, circuit_calling.ts);
+                        tracing::info!(
+                            "CMCE: rejecting U-SETUP P2P from ISSI {} to ISSI {}, failed to allocate second circuit for duplex P2P, error {:?}",
+                            calling_party.ssi,
+                            called_addr.ssi,
+                            e
+                        );
+                        let call_id = self.circuits.get_next_call_id();
+                        let sdu = Self::build_d_release(call_id, DisconnectCause::CongestionInInfrastructure);
+                        let msg =
+                            Self::build_sapmsg_direct(sdu, message.dltime, calling_party, prim.handle, prim.link_id, prim.endpoint_id);
+                        queue.push_back(msg);
                         return;
                     }
                 }
@@ -925,13 +946,13 @@ impl CcBsSubentity {
         // (U-ALERT/U-CONNECT), then allocate the TCH upon U-CONNECT.
 
         // 1) Send D-CALL-PROCEEDING to the calling MS (individually addressed)
-        self.send_d_call_proceeding(queue, message, pdu, call_id, CallTimeoutSetupPhase::T60s, true);
+        self.send_d_call_proceeding(queue, message, pdu, call_id, CallTimeoutSetupPhase::T60s, pdu.hook_method_selection);
 
         // 2) Send D-SETUP to called MS (individually addressed)
         let d_setup = DSetup {
             call_identifier: call_id,
             call_time_out: CallTimeout::T5m,
-            hook_method_selection: true,
+            hook_method_selection: pdu.hook_method_selection,
             simplex_duplex_selection: pdu.simplex_duplex_selection,
             basic_service_information: pdu.basic_service_information.clone(),
             transmission_grant: TransmissionGrant::NotGranted,
@@ -946,6 +967,7 @@ impl CcBsSubentity {
             dm_ms_address: None,
             proprietary: None,
         };
+        tracing::debug!("-> {:?}", d_setup);
 
         self.cached_setups.insert(
             call_id,
