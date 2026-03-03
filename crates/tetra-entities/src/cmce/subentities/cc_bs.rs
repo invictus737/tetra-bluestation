@@ -696,6 +696,29 @@ impl CcBsSubentity {
         }
     }
 
+    fn parse_calling_party_extension(number: &str) -> Option<u32> {
+        let trimmed = number.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        match trimmed.parse::<u32>() {
+            Ok(value) if value <= 0x00FF_FFFF => Some(value),
+            Ok(value) => {
+                tracing::debug!(
+                    "CMCE: ignoring Brew calling extension '{}' (value {} exceeds 24-bit field)",
+                    number,
+                    value
+                );
+                None
+            }
+            Err(_) => {
+                tracing::debug!("CMCE: ignoring non-numeric Brew calling extension '{}'", number);
+                None
+            }
+        }
+    }
+
     #[inline]
     fn has_external_called_party(pdu: &USetup, network_call: &NetworkCircuitCall) -> bool {
         !network_call.number.is_empty() || pdu.external_subscriber_number.is_some() || pdu.called_party_short_number_address.is_some()
@@ -2855,6 +2878,7 @@ impl CcBsSubentity {
         let usage = circuit_called.usage;
         let call_timeout = CallTimeout::try_from(call.timeout as u64).unwrap_or(CallTimeout::T5m);
         let circuit_mode = CircuitModeType::try_from(call.mode as u64).unwrap_or(CircuitModeType::TchS);
+        let calling_party_extension = Self::parse_calling_party_extension(&call.number);
 
         tracing::info!(
             "CMCE: accepting Brew setup request uuid={} call_id={} src={} dst={} ts={} duplex={} number='{}'",
@@ -2894,7 +2918,7 @@ impl CcBsSubentity {
             notification_indicator: None,
             temporary_address: None,
             calling_party_address_ssi: Some(call.source_issi),
-            calling_party_extension: None,
+            calling_party_extension,
             external_subscriber_number: None,
             facility: None,
             dm_ms_address: None,
