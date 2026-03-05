@@ -11,8 +11,9 @@ pub struct Type4FieldGeneric {
 pub struct Type3FieldGeneric {
     pub field_id: u64,
     pub len: usize,
-    /// Up to 64 bits of data (later bits are discarded)
-    pub data: u64,
+    /// Payload bits packed MSB-first in bytes.
+    /// Only the first `len` bits are part of the value.
+    pub data: Vec<u8>,
 }
 
 /// Helper functions for dealing with type2, type3 and type4 fields for MLE, CMCE, MM and SNDCP PDUs.
@@ -193,9 +194,9 @@ pub mod typed {
         }
     }
 
-    /// Parse type3 field into a placeholder struct, pending implementation.
+    /// Parse type3 field into a generic struct.
     /// Checks whether a given type3 field identifier is present. If not, returns None without advancing
-    /// the bitbuffer position. If present, reads the element and returns it as a u64, advancing the buffer position.
+    /// the bitbuffer position. If present, reads the full element payload and advances the buffer position
     /// to the end of the element.
     pub fn parse_type3_generic<E>(obit: bool, buffer: &mut BitBuffer, expected_id: E) -> Result<Option<Type3FieldGeneric>, PduParseErr>
     where
@@ -223,20 +224,22 @@ pub mod typed {
                 });
             }
         };
-        let read_bits = if len_bits > 64 { 64 } else { len_bits };
-        let data = match buffer.read_bits(read_bits) {
-            Some(x) => x,
-            None => {
-                return Err(PduParseErr::BufferEnded {
-                    field: Some("parse_type3_generic data"),
-                });
-            }
-        };
 
-        // Seek forward to end of element, if larger than 64 bits
-        if len_bits > 64 {
-            tracing::warn!("Type3 element {} length {} exceeds 64 bits, data truncated", id, len_bits);
-            buffer.seek_rel(len_bits as isize - 64);
+        let mut data = vec![0u8; len_bits.div_ceil(8)];
+        for bit_idx in 0..len_bits {
+            let bit = match buffer.read_bit() {
+                Some(x) => x,
+                None => {
+                    return Err(PduParseErr::BufferEnded {
+                        field: Some("parse_type3_generic data"),
+                    });
+                }
+            };
+            if bit != 0 {
+                let byte_idx = bit_idx / 8;
+                let bit_pos = 7 - (bit_idx % 8);
+                data[byte_idx] |= bit << bit_pos;
+            }
         }
 
         Ok(Some(Type3FieldGeneric {
@@ -384,10 +387,20 @@ pub mod typed {
 
         if let Some(elem) = value {
             tracing::trace!("write_type3_generic field_present {}", buffer.dump_bin());
+            if elem.len > elem.data.len() * 8 {
+                return Err(PduParseErr::InvalidValue {
+                    field: "write_type3_generic data",
+                    value: elem.len as u64,
+                });
+            }
             // Write mbit and 4-bit field ID, then write length, then the element itself
             write_type34_header_generic(buffer, id);
             buffer.write_bits(elem.len as u64, 11);
-            buffer.write_bits(elem.data, elem.len);
+            for bit_idx in 0..elem.len {
+                let byte = elem.data[bit_idx / 8];
+                let bit = (byte >> (7 - (bit_idx % 8))) & 0x01;
+                buffer.write_bit(bit);
+            }
         } else {
             // Don't write anything (no mbit)
             tracing::trace!("write_type3_generic no_field {}", buffer.dump_bin());
@@ -605,5 +618,34 @@ pub mod typed {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Type3FieldGeneric, typed};
+    use crate::bitbuffer::BitBuffer;
+
+    #[test]
+    fn type3_generic_roundtrip_supports_96_bits() {
+        let original = Type3FieldGeneric {
+            field_id: 2,
+            len: 96,
+            data: vec![0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78],
+        };
+        let mut buffer = BitBuffer::new_autoexpand(16);
+        typed::write_type3_generic(true, &mut buffer, &Some(original), 2u8).expect("type3 write should succeed");
+        buffer.seek(0);
+
+        let parsed = typed::parse_type3_generic(true, &mut buffer, 2u8)
+            .expect("type3 parse should succeed")
+            .expect("field should be present");
+
+        assert_eq!(parsed.field_id, 2);
+        assert_eq!(parsed.len, 96);
+        assert_eq!(
+            parsed.data,
+            vec![0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78]
+        );
     }
 }
