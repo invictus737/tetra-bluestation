@@ -323,6 +323,9 @@ impl CcBsSubentity {
             });
             call_info.duplex = pdu.simplex_duplex_selection as u8;
             call_info.method = pdu.hook_method_selection as u8;
+            // Update these fields as the call is accepted
+            call_info.grant = 0;
+            call_info.permission = 0;
 
             if let Err(err) = self.fsm_individual_mark_connect_request_sent(call_id, call_info.clone()) {
                 match err {
@@ -355,7 +358,6 @@ impl CcBsSubentity {
                 brew_uuid,
                 call_id,
                 call_info.destination,
-                call_info.number
                 call_info.number,
                 call_info.grant,
             );
