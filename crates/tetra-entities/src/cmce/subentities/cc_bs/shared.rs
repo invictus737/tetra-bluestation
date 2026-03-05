@@ -171,6 +171,13 @@ impl CcBsSubentity {
         }
     }
 
+    pub(super) fn find_individual_call_by_issi(&self, issi: u32) -> Option<(u16, IndividualCallState)> {
+        self.individual_calls
+            .iter()
+            .find(|(_, call)| call.calling_addr.ssi == issi || call.called_addr.ssi == issi)
+            .map(|(call_id, call)| (*call_id, call.state))
+    }
+
     pub(super) fn drop_group_calls_if_unlistened(&mut self, queue: &mut MessageQueue, gssi: u32) {
         if self.has_listener(gssi) {
             return;

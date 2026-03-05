@@ -50,6 +50,29 @@ impl CcBsSubentity {
             return;
         }
 
+        if let Some((active_call_id, state)) = self.find_individual_call_by_issi(called_addr.ssi) {
+            tracing::info!(
+                "CMCE: rejecting Brew setup request uuid={} src={} dst={} number='{}' (called ISSI busy in call_id={} state={:?})",
+                brew_uuid,
+                call.source_issi,
+                call.destination,
+                call.number,
+                active_call_id,
+                state
+            );
+            queue.push_back(SapMsg {
+                sap: Sap::Control,
+                src: TetraEntity::Cmce,
+                dest: TetraEntity::Brew,
+                dltime: self.dltime,
+                msg: SapMsgInner::CmceCallControl(CallControl::NetworkCircuitSetupReject {
+                    brew_uuid,
+                    cause: DisconnectCause::CalledPartyBusy.into_raw() as u8,
+                }),
+            });
+            return;
+        }
+
         let communication = CommunicationType::try_from(call.communication as u64).unwrap_or(CommunicationType::P2p);
         let simplex_duplex = call.duplex != 0;
 
