@@ -27,8 +27,8 @@ impl CcBsSubentity {
                             continue;
                         }
                         // Update transmission_grant based on current call state:
-                        // During hangtime (nobody transmitting), use NotGranted;
-                        // during active TX, use GrantedToOtherUser.
+                        // During NoActiveSpeaker (nobody transmitting), use NotGranted;
+                        // during Transmitting, use GrantedToOtherUser.
                         if let Some(active) = self.active_calls.get(&call_id) {
                             cached.pdu.transmission_grant = if active.is_tx_active() {
                                 TransmissionGrant::GrantedToOtherUser
@@ -200,16 +200,16 @@ impl CcBsSubentity {
         }
     }
 
-    /// Check if any active calls in hangtime have expired, and if so, release them
+    /// Check if any active calls in NoActiveSpeaker (hangtime) have expired and release them.
     pub(super) fn check_hangtime_expiry(&mut self, queue: &mut MessageQueue) {
-        // Hangtime: 5 multiframes = ~5 seconds
+        // NoActiveSpeaker (hangtime): 5 multiframes = ~5 seconds
         const HANGTIME_FRAMES: i32 = 5 * 18 * 4;
 
         let expired: Vec<u16> = self
             .active_calls
             .iter()
             .filter_map(|(&call_id, call)| match call.state() {
-                GroupCallState::Hangtime { since } if since.age(self.dltime) > HANGTIME_FRAMES => Some(call_id),
+                GroupCallState::NoActiveSpeaker { since } if since.age(self.dltime) > HANGTIME_FRAMES => Some(call_id),
                 _ => None,
             })
             .collect();

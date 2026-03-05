@@ -195,7 +195,7 @@ impl CcBsSubentity {
                 calling_usage: usage,
                 called_usage: usage,
                 simplex_duplex,
-                state: IndividualCallState::Setup,
+                state: IndividualCallState::IncomingSetupPending,
                 setup_timer_started: Some(self.dltime),
                 setup_timeout: Some(CallTimeoutSetupPhase::T60s),
                 active_timer_started: None,

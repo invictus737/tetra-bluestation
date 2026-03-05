@@ -32,16 +32,28 @@ impl CcBsSubentity {
     ) -> Result<(), IndividualTransitionError> {
         let allowed = matches!(
             (state, event),
-            (IndividualCallState::Setup, IndividualEvent::BindCalledContext)
-                | (IndividualCallState::Alerting, IndividualEvent::BindCalledContext)
-                | (IndividualCallState::Setup, IndividualEvent::SetNetworkCall)
-                | (IndividualCallState::Alerting, IndividualEvent::SetNetworkCall)
-                | (IndividualCallState::Setup, IndividualEvent::MarkConnectRequestSent)
-                | (IndividualCallState::Alerting, IndividualEvent::MarkConnectRequestSent)
-                | (IndividualCallState::Setup, IndividualEvent::Alert)
-                | (IndividualCallState::Alerting, IndividualEvent::Alert)
-                | (IndividualCallState::Setup, IndividualEvent::Connect)
-                | (IndividualCallState::Alerting, IndividualEvent::Connect)
+            (IndividualCallState::CallSetupPending, IndividualEvent::BindCalledContext)
+                | (IndividualCallState::IncomingSetupPending, IndividualEvent::BindCalledContext)
+                | (IndividualCallState::IncomingAlerting, IndividualEvent::BindCalledContext)
+                | (IndividualCallState::IncomingSetupWaitNetworkAck, IndividualEvent::BindCalledContext)
+                | (IndividualCallState::CallSetupPending, IndividualEvent::SetNetworkCall)
+                | (IndividualCallState::IncomingSetupPending, IndividualEvent::SetNetworkCall)
+                | (IndividualCallState::IncomingAlerting, IndividualEvent::SetNetworkCall)
+                | (IndividualCallState::IncomingSetupWaitNetworkAck, IndividualEvent::SetNetworkCall)
+                | (IndividualCallState::CallSetupPending, IndividualEvent::MarkConnectRequestSent)
+                | (IndividualCallState::IncomingSetupPending, IndividualEvent::MarkConnectRequestSent)
+                | (IndividualCallState::IncomingAlerting, IndividualEvent::MarkConnectRequestSent)
+                | (
+                    IndividualCallState::IncomingSetupWaitNetworkAck,
+                    IndividualEvent::MarkConnectRequestSent
+                )
+                | (IndividualCallState::CallSetupPending, IndividualEvent::Alert)
+                | (IndividualCallState::IncomingSetupPending, IndividualEvent::Alert)
+                | (IndividualCallState::IncomingAlerting, IndividualEvent::Alert)
+                | (IndividualCallState::CallSetupPending, IndividualEvent::Connect)
+                | (IndividualCallState::IncomingSetupPending, IndividualEvent::Connect)
+                | (IndividualCallState::IncomingAlerting, IndividualEvent::Connect)
+                | (IndividualCallState::IncomingSetupWaitNetworkAck, IndividualEvent::Connect)
         );
         if allowed {
             Ok(())
@@ -59,7 +71,10 @@ impl CcBsSubentity {
             return Err(IndividualTransitionError::DuplicateCall(call_id));
         }
 
-        if call.state != IndividualCallState::Setup {
+        if !matches!(
+            call.state,
+            IndividualCallState::CallSetupPending | IndividualCallState::IncomingSetupPending
+        ) {
             return Err(IndividualTransitionError::InvalidTransition {
                 call_id,
                 state: call.state,
@@ -132,6 +147,7 @@ impl CcBsSubentity {
         if let Some(call) = self.individual_calls.get_mut(&call_id) {
             call.connect_request_sent = true;
             call.network_call = Some(network_call);
+            call.state = IndividualCallState::IncomingSetupWaitNetworkAck;
         }
         Ok(())
     }

@@ -55,8 +55,10 @@ pub(super) enum CallOrigin {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum GroupCallState {
-    TxActive,
-    Hangtime { since: TdmaTime },
+    /// An active speaker is currently transmitting.
+    Transmitting,
+    /// No active speaker; call is still alive during hangtime.
+    NoActiveSpeaker { since: TdmaTime },
 }
 
 /// Tracks an active group call (local or network-initiated)
@@ -132,9 +134,9 @@ impl ActiveCall {
     #[inline]
     pub(super) fn state(&self) -> GroupCallState {
         if self.tx_active {
-            GroupCallState::TxActive
+            GroupCallState::Transmitting
         } else {
-            GroupCallState::Hangtime {
+            GroupCallState::NoActiveSpeaker {
                 since: self.hangtime_start.unwrap_or_default(),
             }
         }
@@ -142,7 +144,7 @@ impl ActiveCall {
 
     #[inline]
     pub(super) fn is_tx_active(&self) -> bool {
-        matches!(self.state(), GroupCallState::TxActive)
+        matches!(self.state(), GroupCallState::Transmitting)
     }
 
     #[inline]
@@ -204,8 +206,15 @@ pub(super) enum TxDemandQueueResult {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum IndividualCallState {
-    Setup,
-    Alerting,
+    /// Generic setup state for locally initiated individual calls.
+    CallSetupPending,
+    /// Setup state for incoming call leg while awaiting local user/app response.
+    IncomingSetupPending,
+    /// Incoming call has alerted the destination side.
+    IncomingAlerting,
+    /// Incoming call setup is waiting for backhaul/network confirmation.
+    IncomingSetupWaitNetworkAck,
+    /// Call is established.
     Active,
 }
 
@@ -248,12 +257,18 @@ pub(super) struct IndividualCall {
 impl IndividualCall {
     #[inline]
     pub(super) fn is_alerted(&self) -> bool {
-        matches!(self.state, IndividualCallState::Alerting | IndividualCallState::Active)
+        matches!(
+            self.state,
+            IndividualCallState::IncomingAlerting | IndividualCallState::IncomingSetupWaitNetworkAck | IndividualCallState::Active
+        )
     }
 
     pub(super) fn mark_alerted(&mut self, now: TdmaTime, setup_timeout: CallTimeoutSetupPhase) {
-        if self.state == IndividualCallState::Setup {
-            self.state = IndividualCallState::Alerting;
+        if matches!(
+            self.state,
+            IndividualCallState::CallSetupPending | IndividualCallState::IncomingSetupPending
+        ) {
+            self.state = IndividualCallState::IncomingAlerting;
         }
         self.setup_timer_started = Some(now);
         self.setup_timeout = Some(setup_timeout);

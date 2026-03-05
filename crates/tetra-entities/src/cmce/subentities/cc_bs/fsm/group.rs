@@ -28,13 +28,13 @@ impl CcBsSubentity {
     fn validate_group_transition(call_id: u16, state: GroupCallState, event: GroupEvent) -> Result<(), GroupTransitionError> {
         let allowed = matches!(
             (state, event),
-            (GroupCallState::TxActive, GroupEvent::TxDemand)
-                | (GroupCallState::Hangtime { .. }, GroupEvent::TxDemand)
-                | (GroupCallState::TxActive, GroupEvent::TxCeased)
-                | (GroupCallState::TxActive, GroupEvent::NetworkCallStart)
-                | (GroupCallState::Hangtime { .. }, GroupEvent::NetworkCallStart)
-                | (GroupCallState::TxActive, GroupEvent::NetworkCallEnd)
-                | (GroupCallState::Hangtime { .. }, GroupEvent::NetworkCallEnd)
+            (GroupCallState::Transmitting, GroupEvent::TxDemand)
+                | (GroupCallState::NoActiveSpeaker { .. }, GroupEvent::TxDemand)
+                | (GroupCallState::Transmitting, GroupEvent::TxCeased)
+                | (GroupCallState::Transmitting, GroupEvent::NetworkCallStart)
+                | (GroupCallState::NoActiveSpeaker { .. }, GroupEvent::NetworkCallStart)
+                | (GroupCallState::Transmitting, GroupEvent::NetworkCallEnd)
+                | (GroupCallState::NoActiveSpeaker { .. }, GroupEvent::NetworkCallEnd)
         );
         if allowed {
             Ok(())
@@ -98,7 +98,7 @@ impl CcBsSubentity {
         let ts = call.ts;
         let dest_ssi = call.dest_gssi;
         let current_speaker = call.source_issi;
-        let grant_now = matches!(state, GroupCallState::Hangtime { .. });
+        let grant_now = matches!(state, GroupCallState::NoActiveSpeaker { .. });
         let queue_result = if grant_now {
             call.grant_floor(requesting_party.ssi, Some(requesting_party));
             None
@@ -145,7 +145,7 @@ impl CcBsSubentity {
             return Ok(());
         }
 
-        // Hangtime -> TxActive transition with granted floor.
+        // NoActiveSpeaker -> Transmitting transition with granted floor.
         self.fsm_send_d_tx_granted_individual(
             queue,
             call_id,
@@ -212,10 +212,10 @@ impl CcBsSubentity {
         let dest_ssi = call.dest_gssi;
         let queued_request = call.take_queued_tx_demand();
         if let Some(requester) = queued_request {
-            // TxActive -> TxActive, hand over floor directly to queued requester.
+            // Transmitting -> Transmitting, hand over floor directly to queued requester.
             call.grant_floor(requester.ssi, Some(requester));
         } else {
-            // TxActive -> Hangtime.
+            // Transmitting -> NoActiveSpeaker.
             call.enter_hangtime(self.dltime);
         }
 
@@ -365,7 +365,7 @@ impl CcBsSubentity {
         let state = call.state();
         Self::validate_group_transition(call_id, state, GroupEvent::NetworkCallEnd)?;
 
-        if matches!(state, GroupCallState::TxActive) {
+        if matches!(state, GroupCallState::Transmitting) {
             if let Some(active_call) = self.active_calls.get_mut(&call_id) {
                 active_call.enter_hangtime(self.dltime);
                 active_call.brew_uuid = None;
