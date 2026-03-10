@@ -324,7 +324,6 @@ impl CcBsSubentity {
                 layer2_qos: 0,
                 stealing_permission: false,
                 stealing_repeats_flag: false,
-
                 chan_alloc: None,
                 main_address: prim.received_tetra_address,
                 tx_reporter: None,
