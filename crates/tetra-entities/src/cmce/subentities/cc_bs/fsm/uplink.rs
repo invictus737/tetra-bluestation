@@ -12,7 +12,17 @@ impl CcBsSubentity {
     ) {
         // Check if we can satisfy this request
         if !Self::feature_check_u_setup(pdu) {
-            tracing::error!("Unsupported critical features in USetup");
+            tracing::info!(
+                "CMCE: rejecting U-SETUP from ISSI {} due to unsupported critical feature(s)",
+                calling_party.ssi
+            );
+            let SapMsgInner::LcmcMleUnitdataInd(prim) = &message.msg else {
+                panic!()
+            };
+            let reject_call_id = self.circuits.get_next_call_id();
+            let sdu = Self::build_d_release(reject_call_id, DisconnectCause::NotAllowedTrafficCase);
+            let msg = Self::build_sapmsg_direct(sdu, message.dltime, calling_party, prim.handle, prim.link_id, prim.endpoint_id);
+            queue.push_back(msg);
             return;
         }
 
