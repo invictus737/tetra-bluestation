@@ -46,7 +46,7 @@ mod fsm;
 mod network;
 mod shared;
 mod timers;
-mod uplink;
+mod ingress;
 
 use call::{ActiveCall, CallOrigin, GroupCallState, IndividualCall, IndividualCallState, TxDemandQueueResult};
 use fsm::{GroupTransitionError, IndividualTransitionError};
