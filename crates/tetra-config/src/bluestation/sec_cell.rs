@@ -83,6 +83,10 @@ pub struct CfgCellInfo {
 
     pub local_ssi_ranges: SortedDisjointSsiRanges,
 
+    /// IANA timezone name (e.g. "Europe/Amsterdam"). When set, enables D-NWRK-BROADCAST
+    /// time broadcasting so MSs can synchronize their clocks.
+    pub timezone: Option<String>,
+
     /// Periodic automatic broadcast of Home Mode Display SDS.
     /// Enabled when `Some`, i.e. `[cell_info.home_mode_display]` exists in config.
     pub home_mode_display: Option<CfgHomeModeDisplay>,
@@ -123,6 +127,8 @@ pub struct CellInfoDto {
 
     pub local_ssi_ranges: Option<Vec<(u32, u32)>>,
 
+    pub timezone: Option<String>,
+
     pub home_mode_display: Option<HomeModeDisplayDto>,
 
     #[serde(flatten)]
@@ -162,6 +168,7 @@ pub fn cell_dto_to_cfg(ci: CellInfoDto) -> CfgCellInfo {
             .local_ssi_ranges
             .map(SortedDisjointSsiRanges::from_vec_tuple)
             .unwrap_or(SortedDisjointSsiRanges::from_vec_ssirange(vec![])),
+        timezone: ci.timezone,
         home_mode_display: ci.home_mode_display.map(|h| CfgHomeModeDisplay {
             source_issi: h.source_issi.unwrap_or(0),
             interval_frames: h.interval_frames.unwrap_or(96),
@@ -206,6 +213,7 @@ mod tests {
             u_plane_dtx: None,
             frame_18_ext: None,
             local_ssi_ranges: None,
+            timezone: None,
             home_mode_display: None,
             extra: HashMap::new(),
         }

@@ -27,3 +27,5 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "time"] }
 tungstenite = { workspace = true }
 uuid = { workspace = true }
 md5 = "0.7"
+chrono = { workspace = true }
+chrono-tz = { workspace = true }

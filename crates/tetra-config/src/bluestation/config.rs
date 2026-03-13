@@ -90,6 +90,13 @@ impl StackConfig {
             };
         }
 
+        // Validate timezone if configured
+        if let Some(ref tz) = self.cell.timezone {
+            if tz.parse::<chrono_tz::Tz>().is_err() {
+                return Err("Invalid IANA timezone name in cell.timezone");
+            }
+        }
+
         Ok(())
     }
 }

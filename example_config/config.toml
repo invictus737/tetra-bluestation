@@ -155,6 +155,11 @@ voice_service = true
 # Frame 18 extension support
 # frame_18_ext = false
 
+# IANA timezone for D-NWRK-BROADCAST time broadcasting. When set, the BS will
+# broadcast UTC time and local time offset once per hyperframe (~61s) so MSs
+# can synchronize their clocks. Handles DST automatically.
+# timezone = "Europe/Amsterdam"
+
 # Local SSI ranges for this cell. Traffic for these ranges will not leave the cell
 # This overrides any settings in brew section, if enabled. 
 # Also, incoming brew traffic on those rangges will be dropped
