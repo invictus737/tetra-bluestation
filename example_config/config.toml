@@ -225,10 +225,10 @@ voice_service = true
 # Adaptive jitter buffering is always enabled; this adds fixed startup delay if needed.
 # jitter_initial_latency_frames = 0
 
-# Enable SDS forwarding between local and Brew clients. Enabled by default.
+# Enable SDS forwarding between local and Brew clients. Enabled by default. 
 # feature_sds_enabled = true
 
 # Uncomment to allow only calls for select SSIs to be transmitted over Brew
-# SDS works for all SSIs, currently, but the SDS over Brew feature may be fully disabled.
+# SDS works for all SSIs, currently, but the SDS over Brew feature may be fully disabled. 
 # If left commented, all (outside of local_ssi_ranges) calls are allowed over Brew
 # whitelisted_ssis = [91]
