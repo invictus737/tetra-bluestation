@@ -336,9 +336,7 @@ impl SoapyIo {
     }
 }
 
-
 // Messy logic related to opening a device follows...
-
 
 /// Struct to temporarily hold stuff related to opening and detecting a device
 struct OpenedDevice {
@@ -370,7 +368,11 @@ fn open_given_device(dev_args: soapysdr::Args) -> Result<OpenedDevice, soapysdr:
 
     // Check whether the device is supported
     if let Some(detected_device) = SupportedDevice::detect(&driver_key, &hardware_key) {
-        tracing::info!("Found supported device with driver_key '{}' hardware_key '{}'", driver_key, hardware_key);
+        tracing::info!(
+            "Found supported device with driver_key '{}' hardware_key '{}'",
+            driver_key,
+            hardware_key
+        );
         Ok(OpenedDevice {
             dev_args,
             dev,
@@ -380,7 +382,11 @@ fn open_given_device(dev_args: soapysdr::Args) -> Result<OpenedDevice, soapysdr:
             soapyremote_used,
         })
     } else {
-        tracing::info!("Skipping unsupported device with driver_key '{}' hardware_key '{}'", driver_key, hardware_key);
+        tracing::info!(
+            "Skipping unsupported device with driver_key '{}' hardware_key '{}'",
+            driver_key,
+            hardware_key
+        );
         Err(soapysdr::Error {
             code: soapysdr::ErrorCode::NotSupported,
             message: "Unsupported device".to_string(),
@@ -394,7 +400,7 @@ fn find_supported_device(filter_args: soapysdr::Args) -> Result<OpenedDevice, so
         //tracing::info!("Trying to open a device with arguments: {}", args_formatted);
         match open_given_device(dev_args) {
             Ok(opened_device) => return Ok(opened_device),
-            Err(_) => {},
+            Err(_) => {}
         }
     }
     return Err(soapysdr::Error {
@@ -414,10 +420,12 @@ fn open_device(soapy_cfg: &CfgSoapySdr, mode: StackMode) -> Result<(soapysdr::De
 
     let mut sdr_settings = match SdrSettings::get_settings(&soapy_cfg, opened_device.detected_device, mode) {
         Ok(sdr_settings) => sdr_settings,
-        Err(soapy_settings::Error::InvalidConfiguration) => return Err(soapysdr::Error {
-            code: soapysdr::ErrorCode::Other,
-            message: "Invalid SDR device configuration".to_string(),
-        }),
+        Err(soapy_settings::Error::InvalidConfiguration) => {
+            return Err(soapysdr::Error {
+                code: soapysdr::ErrorCode::Other,
+                message: "Invalid SDR device configuration".to_string(),
+            });
+        }
     };
 
     if opened_device.soapyremote_used {
@@ -439,7 +447,10 @@ fn open_device(soapy_cfg: &CfgSoapySdr, mode: StackMode) -> Result<(soapysdr::De
 
         // Make sure device gets closed first. Not sure if needed.
         std::mem::drop(opened_device.dev);
-        opened_device.dev = soapycheck!("open SoapySDR device with additional arguments", soapysdr::Device::new(opened_device.dev_args));
+        opened_device.dev = soapycheck!(
+            "open SoapySDR device with additional arguments",
+            soapysdr::Device::new(opened_device.dev_args)
+        );
         // Make sure it is still the same device.
         // Unlikely to change, but who knows if a device got connected just in between,
         // or if the device broke from first opening attempt and something else got opened
@@ -447,8 +458,13 @@ fn open_device(soapy_cfg: &CfgSoapySdr, mode: StackMode) -> Result<(soapysdr::De
         let new_driver_key = opened_device.dev.driver_key().unwrap_or_default();
         let new_hardware_key = opened_device.dev.hardware_key().unwrap_or_default();
         if new_driver_key != opened_device.driver_key || new_hardware_key != opened_device.hardware_key {
-            tracing::info!("Expected the same driver_key='{}' hardware_key='{}' after reopen, got driver_key='{}' hardware_key='{}'",
-                opened_device.driver_key, opened_device.hardware_key, new_driver_key, new_hardware_key);
+            tracing::info!(
+                "Expected the same driver_key='{}' hardware_key='{}' after reopen, got driver_key='{}' hardware_key='{}'",
+                opened_device.driver_key,
+                opened_device.hardware_key,
+                new_driver_key,
+                new_hardware_key
+            );
             return Err(soapysdr::Error {
                 code: soapysdr::ErrorCode::Other,
                 message: "Reopened a different device".to_string(),

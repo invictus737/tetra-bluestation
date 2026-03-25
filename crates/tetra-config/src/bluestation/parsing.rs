@@ -17,7 +17,7 @@ pub fn from_toml_str(toml_str: &str) -> Result<SharedConfig, Box<dyn std::error:
     let root: TomlConfigRoot = toml::from_str(toml_str)?;
 
     // Various sanity checks
-    let expected_config_version = "0.5";
+    let expected_config_version = "0.6";
     if !root.config_version.eq(expected_config_version) {
         return Err(format!(
             "Unrecognized config_version: {}, expect {}",
@@ -34,9 +34,10 @@ pub fn from_toml_str(toml_str: &str) -> Result<SharedConfig, Box<dyn std::error:
     }
     if let Some(ref soapy) = root.phy_io.soapysdr {
         let extra_keys = sorted_keys(&soapy.extra);
-        let extra_keys_filtered = extra_keys.iter().filter(|key| {
-            !(key.starts_with("rx_gain_") || key.starts_with("tx_gain_"))
-        }).collect::<Vec<&&str>>();
+        let extra_keys_filtered = extra_keys
+            .iter()
+            .filter(|key| !(key.starts_with("rx_gain_") || key.starts_with("tx_gain_")))
+            .collect::<Vec<&&str>>();
         if !extra_keys_filtered.is_empty() {
             return Err(format!("Unrecognized fields: phy_io.soapysdr::{:?}", extra_keys_filtered).into());
         }

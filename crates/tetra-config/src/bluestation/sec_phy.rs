@@ -56,26 +56,40 @@ pub fn phy_dto_to_cfg(src: PhyIoDto) -> CfgPhyIo {
             tx_ch: soapy_dto.tx_channel,
             rx_ant: soapy_dto.rx_antenna,
             tx_ant: soapy_dto.tx_antenna,
-            rx_gains: soapy_dto.extra.iter().filter_map(|(key, value)| {
-                key.strip_prefix("rx_gain_").map(|gain_name| {
-                    (gain_name.to_string().to_lowercase(), match value {
-                        Value::Integer(v) => *v as f64,
-                        Value::Float(v) => *v,
-                        // TODO: should this error be returned somehow?
-                        _ => panic!("RX gain value must be a number"),
+            rx_gains: soapy_dto
+                .extra
+                .iter()
+                .filter_map(|(key, value)| {
+                    key.strip_prefix("rx_gain_").map(|gain_name| {
+                        (
+                            gain_name.to_string().to_lowercase(),
+                            match value {
+                                Value::Integer(v) => *v as f64,
+                                Value::Float(v) => *v,
+                                // TODO: should this error be returned somehow?
+                                _ => panic!("RX gain value must be a number"),
+                            },
+                        )
                     })
                 })
-            }).collect(),
-            tx_gains: soapy_dto.extra.iter().filter_map(|(key, value)| {
-                key.strip_prefix("tx_gain_").map(|gain_name| {
-                    (gain_name.to_string().to_lowercase(), match value {
-                        Value::Integer(v) => *v as f64,
-                        Value::Float(v) => *v,
-                        // TODO: should this error be returned somehow?
-                        _ => panic!("TX gain value must be a number"),
+                .collect(),
+            tx_gains: soapy_dto
+                .extra
+                .iter()
+                .filter_map(|(key, value)| {
+                    key.strip_prefix("tx_gain_").map(|gain_name| {
+                        (
+                            gain_name.to_string().to_lowercase(),
+                            match value {
+                                Value::Integer(v) => *v as f64,
+                                Value::Float(v) => *v,
+                                // TODO: should this error be returned somehow?
+                                _ => panic!("TX gain value must be a number"),
+                            },
+                        )
                     })
                 })
-            }).collect(),
+                .collect(),
         }
     });
 

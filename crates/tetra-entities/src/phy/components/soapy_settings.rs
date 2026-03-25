@@ -2,7 +2,6 @@
 
 use tetra_config::bluestation::{StackMode, sec_phy_soapy::*};
 
-
 /// Enum of all supported devices
 pub enum SupportedDevice {
     LimeSdr(LimeSdrModel),
@@ -34,42 +33,30 @@ impl SupportedDevice {
     /// Return None if the device is not supported.
     pub fn detect(driver_key: &str, hardware_key: &str) -> Option<Self> {
         match (driver_key, hardware_key) {
-            ("FX3", "LimeSDR-USB") =>
-                Some(Self::LimeSdr(LimeSdrModel::LimeSdrUsb)),
-            ("FX3", _) =>
-                Some(Self::LimeSdr(LimeSdrModel::OtherFx3)),
+            ("FX3", "LimeSDR-USB") => Some(Self::LimeSdr(LimeSdrModel::LimeSdrUsb)),
+            ("FX3", _) => Some(Self::LimeSdr(LimeSdrModel::OtherFx3)),
 
-            ("FT601", "LimeSDR-Mini_v2") =>
-                Some(Self::LimeSdr(LimeSdrModel::LimeSdrMiniV2)),
-            ("FT601", "LimeNET-Micro") =>
-                Some(Self::LimeSdr(LimeSdrModel::LimeNetMicro)),
-            ("FT601", _) =>
-                Some(Self::LimeSdr(LimeSdrModel::OtherFt601)),
+            ("FT601", "LimeSDR-Mini_v2") => Some(Self::LimeSdr(LimeSdrModel::LimeSdrMiniV2)),
+            ("FT601", "LimeNET-Micro") => Some(Self::LimeSdr(LimeSdrModel::LimeNetMicro)),
+            ("FT601", _) => Some(Self::LimeSdr(LimeSdrModel::OtherFt601)),
 
-            ("sx", _) =>
-                Some(Self::SXceiver),
+            ("sx", _) => Some(Self::SXceiver),
 
-            ("PlutoSDR", _) =>
-                Some(Self::PlutoSdr),
+            ("PlutoSDR", _) => Some(Self::PlutoSdr),
 
             // USRP B210 seems to report as ("b200", "B210"),
             // but the driver key is also known to be "uhd" in some cases.
             // The reason is unknown but might be due to
             // gateware, firmware or driver version differences.
             // Try to detect USRP correctly in all cases.
-            ("b200", "B200") | ("uhd", "B200") =>
-                Some(Self::Usrp(UsrpModel::B200)),
-            ("b200", "B210") | ("uhd", "B210") =>
-                Some(Self::Usrp(UsrpModel::B210)),
-            ("b200", _) | ("uhd", _) =>
-                Some(Self::Usrp(UsrpModel::Other)),
+            ("b200", "B200") | ("uhd", "B200") => Some(Self::Usrp(UsrpModel::B200)),
+            ("b200", "B210") | ("uhd", "B210") => Some(Self::Usrp(UsrpModel::B210)),
+            ("b200", _) | ("uhd", _) => Some(Self::Usrp(UsrpModel::Other)),
             // TODO: add other USRP models if needed
-
             _ => None,
         }
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub struct SdrSettings {
@@ -137,7 +124,7 @@ impl SdrSettings {
         }
         if !cfg_gains.is_empty() {
             tracing::error!("Unsupported RX gains for {}: {:?}", settings.name, cfg_gains);
-            return Err(Error::InvalidConfiguration)
+            return Err(Error::InvalidConfiguration);
         }
 
         let mut cfg_gains = cfg.tx_gains.clone();
@@ -148,7 +135,7 @@ impl SdrSettings {
         }
         if !cfg_gains.is_empty() {
             tracing::error!("Unsupported TX gains for {}: {:?}", settings.name, cfg_gains);
-            return Err(Error::InvalidConfiguration)
+            return Err(Error::InvalidConfiguration);
         }
 
         // TODO: check for extra gain fields in cfg
@@ -159,17 +146,13 @@ impl SdrSettings {
     /// Get default settings based on SDR type
     fn get_defaults(cfg: &CfgSoapySdr, device: SupportedDevice, mode: StackMode) -> Self {
         match device {
-            SupportedDevice::LimeSdr(model) =>
-                Self::settings_limesdr(mode, model),
+            SupportedDevice::LimeSdr(model) => Self::settings_limesdr(mode, model),
 
-            SupportedDevice::SXceiver =>
-                Self::settings_sxceiver(mode, cfg.fs),
+            SupportedDevice::SXceiver => Self::settings_sxceiver(mode, cfg.fs),
 
-            SupportedDevice::PlutoSdr =>
-                Self::settings_pluto(mode),
+            SupportedDevice::PlutoSdr => Self::settings_pluto(mode),
 
-            SupportedDevice::Usrp(model) =>
-                Self::settings_usrp(mode, model),
+            SupportedDevice::Usrp(model) => Self::settings_usrp(mode, model),
         }
     }
 
@@ -220,25 +203,24 @@ impl SdrSettings {
             }
             .to_string(),
 
-            rx_ant: Some(match model {
-                LimeSdrModel::LimeSdrUsb => "LNAL",
-                _ => "LNAW",
-            }.to_string()),
+            rx_ant: Some(
+                match model {
+                    LimeSdrModel::LimeSdrUsb => "LNAL",
+                    _ => "LNAW",
+                }
+                .to_string(),
+            ),
 
-            tx_ant: Some(match model {
-                LimeSdrModel::LimeSdrUsb => "BAND1",
-                _ => "BAND2",
-            }.to_string()),
+            tx_ant: Some(
+                match model {
+                    LimeSdrModel::LimeSdrUsb => "BAND1",
+                    _ => "BAND2",
+                }
+                .to_string(),
+            ),
 
-            rx_gain: vec![
-                ("LNA".to_string(), 18.0),
-                ("TIA".to_string(), 6.0),
-                ("PGA".to_string(), 10.0),
-            ],
-            tx_gain: vec![
-                ("PAD".to_string(), 22.0),
-                ("IAMP".to_string(), 6.0),
-            ],
+            rx_gain: vec![("LNA".to_string(), 18.0), ("TIA".to_string(), 6.0), ("PGA".to_string(), 10.0)],
+            tx_gain: vec![("PAD".to_string(), 22.0), ("IAMP".to_string(), 6.0)],
 
             // Minimum latency for BS/MS, maximum throughput for monitor
             rx_args: vec![("latency".to_string(), if mode == StackMode::Mon { "1" } else { "0" }.to_string())],
@@ -265,14 +247,8 @@ impl SdrSettings {
             rx_ant: Some("RX".to_string()),
             tx_ant: Some("TX".to_string()),
 
-            rx_gain: vec![
-                ("LNA".to_string(), 42.0),
-                ("PGA".to_string(), 16.0),
-            ],
-            tx_gain: vec![
-                ("DAC".to_string(), 9.0),
-                ("MIXER".to_string(), 30.0),
-            ],
+            rx_gain: vec![("LNA".to_string(), 42.0), ("PGA".to_string(), 16.0)],
+            tx_gain: vec![("DAC".to_string(), 9.0), ("MIXER".to_string(), 30.0)],
 
             rx_args: vec![("period".to_string(), block_size(fs).to_string())],
             tx_args: vec![("period".to_string(), block_size(fs).to_string())],
@@ -326,7 +302,6 @@ impl SdrSettings {
         }
     }
 }
-
 
 /// Get processing block size in samples for a given sample rate.
 /// This can be used to optimize performance for some SDRs.
