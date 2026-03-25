@@ -1,4 +1,5 @@
 use tetra_config::bluestation::SharedConfig;
+use tetra_core::Layer2Service;
 use tetra_core::{BitBuffer, Sap, SsiType, TdmaTime, TetraAddress, tetra_entities::TetraEntity, unimplemented_log};
 use tetra_pdus::cmce::enums::pre_coded_status::PreCodedStatus;
 use tetra_pdus::cmce::enums::short_report_type::ShortReportType;
@@ -270,7 +271,7 @@ impl SdsBsSubentity {
                 handle: 0,
                 endpoint_id: 0,
                 link_id: 0,
-                layer2service: 0,
+                layer2service: Layer2Service::Todo,
                 pdu_prio: 0,
                 layer2_qos: 0,
                 stealing_permission: false,
@@ -322,7 +323,7 @@ impl SdsBsSubentity {
                 handle: 0,
                 endpoint_id: 0,
                 link_id: 0,
-                layer2service: 0,
+                layer2service: Layer2Service::Todo,
                 pdu_prio: 0,
                 layer2_qos: 0,
                 stealing_permission: false,
