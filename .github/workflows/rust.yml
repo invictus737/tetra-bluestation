@@ -18,11 +18,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
-            bin_path: target/x86_64-unknown-linux-gnu/release/bluestation-bs
-            build_cmd: cargo build --release --target x86_64-unknown-linux-gnu -p bluestation-bs --bin bluestation-bs
-            artifact_name: bluestation-bs-x86_64
-
           - target: aarch64-unknown-linux-gnu
             bin_path: target/aarch64-unknown-linux-gnu/release/bluestation-bs
             build_cmd: cross build --release --target aarch64-unknown-linux-gnu -p bluestation-bs --bin bluestation-bs
@@ -32,6 +27,7 @@ jobs:
             bin_path: target/arm-unknown-linux-gnueabihf/release/bluestation-bs
             build_cmd: cross build --release --target arm-unknown-linux-gnueabihf -p bluestation-bs --bin bluestation-bs
             artifact_name: bluestation-bs-armv6
+            rustflags_env: CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_RUSTFLAGS
             cpu_rustflags: -C target-cpu=arm1176jzf-s
 
     steps:
@@ -41,28 +37,14 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          targets: ${{ matrix.target }}
+          target: ${{ matrix.target }}
 
       - name: Install cross
-        if: matrix.target != 'x86_64-unknown-linux-gnu'
         run: cargo install cross --locked
 
       - name: Apply CPU-specific RUSTFLAGS
         if: matrix.cpu_rustflags != ''
-        run: echo "RUSTFLAGS=${{ matrix.cpu_rustflags }}" >> "$GITHUB_ENV"
-
-      - name: Install native build dependencies (amd64)
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            git make g++ cmake pkg-config \
-            libsoapysdr-dev \
-            soapysdr-tools \
-            libasound2-dev \
-            clang llvm-dev libclang-dev
-          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig" >> "$GITHUB_ENV"
-          pkg-config --modversion SoapySDR
+        run: echo "${{ matrix.rustflags_env }}=${{ matrix.cpu_rustflags }}" >> "$GITHUB_ENV"
 
       - name: Build
         run: ${{ matrix.build_cmd }}
