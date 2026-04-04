@@ -19,14 +19,14 @@ jobs:
       matrix:
         include:
           - target: aarch64-unknown-linux-gnu
-            bin_path: target/aarch64-unknown-linux-gnu/release/bluestation-bs
-            build_cmd: cross build --release --target aarch64-unknown-linux-gnu -p bluestation-bs --bin bluestation-bs
-            artifact_name: bluestation-bs-aarch64
+            bin_path: target/aarch64-unknown-linux-gnu/release/tetra-bluestation
+            build_cmd: cross build --release --target aarch64-unknown-linux-gnu -p bluestation-bs --bin tetra-bluestation
+            artifact_name: tetra-bluestation-aarch64
 
           - target: arm-unknown-linux-gnueabihf
-            bin_path: target/arm-unknown-linux-gnueabihf/release/bluestation-bs
-            build_cmd: cross build --release --target arm-unknown-linux-gnueabihf -p bluestation-bs --bin bluestation-bs
-            artifact_name: bluestation-bs-armv6
+            bin_path: target/arm-unknown-linux-gnueabihf/release/tetra-bluestation
+            build_cmd: cross build --release --target arm-unknown-linux-gnueabihf -p bluestation-bs --bin tetra-bluestation
+            artifact_name: tetra-bluestation-armv6
             rustflags_env: CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_RUSTFLAGS
             cpu_rustflags: -C target-cpu=arm1176jzf-s
 
