@@ -22,18 +22,15 @@ jobs:
             bin_path: target/aarch64-unknown-linux-gnu/release/tetra-bluestation
             build_cmd: cross build --release --target aarch64-unknown-linux-gnu -p bluestation-bs --bin tetra-bluestation
             artifact_name: tetra-bluestation-aarch64
-            pkg_config_path: /usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+            dockerfile: cross/aarch64.Dockerfile
 
           - target: arm-unknown-linux-gnueabihf
             bin_path: target/arm-unknown-linux-gnueabihf/release/tetra-bluestation
             build_cmd: cross build --release --target arm-unknown-linux-gnueabihf -p bluestation-bs --bin tetra-bluestation
             artifact_name: tetra-bluestation-armv6
+            dockerfile: cross/armv6.Dockerfile
             rustflags_env: CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_RUSTFLAGS
             cpu_rustflags: -C target-cpu=arm1176jzf-s
-            pkg_config_path: /usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig
-
-    env:
-      PKG_CONFIG_ALLOW_CROSS: "1"
 
     steps:
       - name: Checkout
@@ -47,38 +44,52 @@ jobs:
       - name: Install cross
         run: cargo install cross --locked --version 0.2.5
 
-      - name: Generate Cross.toml
+      - name: Create cross config and custom Dockerfiles
+        shell: bash
         run: |
+          mkdir -p cross
+
           cat > Cross.toml <<'EOF'
           [target.aarch64-unknown-linux-gnu]
-          pre-build = [
-            "dpkg --add-architecture $CROSS_DEB_ARCH",
-            "apt-get update",
-            "apt-get install -y --no-install-recommends pkg-config libsoapysdr-dev:$CROSS_DEB_ARCH libasound2-dev:$CROSS_DEB_ARCH",
-            "rm -rf /var/lib/apt/lists/*"
-          ]
+          dockerfile = "cross/aarch64.Dockerfile"
 
           [target.arm-unknown-linux-gnueabihf]
-          pre-build = [
-            "dpkg --add-architecture $CROSS_DEB_ARCH",
-            "apt-get update",
-            "apt-get install -y --no-install-recommends pkg-config libsoapysdr-dev:$CROSS_DEB_ARCH libasound2-dev:$CROSS_DEB_ARCH",
-            "rm -rf /var/lib/apt/lists/*"
-          ]
+          dockerfile = "cross/armv6.Dockerfile"
+          EOF
+
+          cat > cross/aarch64.Dockerfile <<'EOF'
+          FROM ghcr.io/cross-rs/aarch64-unknown-linux-gnu:0.2.5
+
+          RUN apt-get update && apt-get install -y --no-install-recommends \
+              pkg-config \
+              libsoapysdr-dev \
+              libasound2-dev \
+            && rm -rf /var/lib/apt/lists/*
+
+          ENV PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+          ENV PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+          ENV PKG_CONFIG_SYSROOT_DIR=/
+          EOF
+
+          cat > cross/armv6.Dockerfile <<'EOF'
+          FROM ghcr.io/cross-rs/arm-unknown-linux-gnueabihf:0.2.5
+
+          RUN dpkg --add-architecture armhf \
+           && apt-get update \
+           && apt-get install -y --no-install-recommends \
+              pkg-config \
+              libsoapysdr-dev:armhf \
+              libasound2-dev:armhf \
+           && rm -rf /var/lib/apt/lists/*
+
+          ENV PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig
+          ENV PKG_CONFIG_LIBDIR=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig
+          ENV PKG_CONFIG_SYSROOT_DIR=/
           EOF
 
       - name: Apply CPU-specific RUSTFLAGS
         if: matrix.cpu_rustflags != ''
         run: echo "${{ matrix.rustflags_env }}=${{ matrix.cpu_rustflags }}" >> "$GITHUB_ENV"
-
-      - name: Set pkg-config paths
-        run: |
-          echo "PKG_CONFIG_PATH=${{ matrix.pkg_config_path }}" >> "$GITHUB_ENV"
-          echo "TARGET_PKG_CONFIG_PATH=${{ matrix.pkg_config_path }}" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_LIBDIR=${{ matrix.pkg_config_path }}" >> "$GITHUB_ENV"
-          echo "TARGET_PKG_CONFIG_LIBDIR=${{ matrix.pkg_config_path }}" >> "$GITHUB_ENV"
-          echo "PKG_CONFIG_SYSROOT_DIR=/" >> "$GITHUB_ENV"
-          echo "TARGET_PKG_CONFIG_SYSROOT_DIR=/" >> "$GITHUB_ENV"
 
       - name: Build
         run: ${{ matrix.build_cmd }}
